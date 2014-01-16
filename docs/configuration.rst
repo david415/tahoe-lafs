@@ -420,6 +420,38 @@ Client Configuration
     all of their uploads without using the internet.
 
 
+Client Server Selection
+=======================
+
+``[client-server-selection]``
+
+``use_introducer = (Boolean, optional)``
+
+    This defaults to True. If set to False then the client will not
+    use any introducer.
+
+Note that in the following configuration options "serverid" is not
+literal but instead should be set to the appropriate serverid of a
+given node.
+
+``server.serverid.type = (type, mandatory)``
+
+    Right now only the 'tahoe-foolscap' storage server type is
+    supported.
+
+``server.serverid.nickname = (nickname, mandatory)``
+
+    Storage server nickname.
+
+``server.serverid.seed = (permutation-seed-base32, mandatory)``
+
+    Storage server seed.
+
+``server.serverid.furl = (furl, mandatory)``
+
+    Storage server furl.
+
+
 Frontend Configuration
 ======================
 

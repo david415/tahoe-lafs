@@ -204,6 +204,10 @@ class Root(rend.Page):
         return ctx.tag[ul]
 
     def data_introducer_furl_prefix(self, ctx, data):
+
+        if not self.client.introducer_furl:
+            return
+
         ifurl = self.client.introducer_furl
         # trim off the secret swissnum
         (prefix, _, swissnum) = ifurl.rpartition("/")
@@ -291,6 +295,7 @@ class Root(rend.Page):
 
         announcement = server.get_announcement()
         version = announcement["my-version"]
+
         _, _, hints, _ = referenceable.decode_furl(server.get_storage_furl())
         addr = "%s (%s)" % ( addr, ",".join( "%s:%s" % ( host, port ) for (ipv, host, port) in hints ) )
         available_space = server.get_available_space()
@@ -298,6 +303,12 @@ class Root(rend.Page):
             available_space = "N/A"
         else:
             available_space = abbreviate_size(available_space)
+
+        seed         = announcement['permutation-seed-base32']
+        furl         = announcement['anonymous-storage-FURL']
+
+        ctx.fillSlots("seed", seed)
+        ctx.fillSlots("furl", furl)
         ctx.fillSlots("address", addr)
         ctx.fillSlots("service_connection_status", service_connection_status)
         ctx.fillSlots("service_connection_status_abs_time", service_connection_status_abs_time)
