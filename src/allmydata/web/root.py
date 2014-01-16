@@ -1,4 +1,5 @@
 import time, os
+import binascii
 
 from twisted.internet import address
 from twisted.web import http
@@ -296,6 +297,7 @@ class Root(rend.Page):
         seed = announcement['permutation-seed-base32']
         furl = announcement['anonymous-storage-FURL']
 
+        ctx.fillSlots("nodeid",binascii.b2a_hex(nodeid))
         ctx.fillSlots("seed", seed)
         ctx.fillSlots("furl", furl)
         ctx.fillSlots("address", addr)

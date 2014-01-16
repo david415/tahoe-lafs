@@ -1,10 +1,15 @@
 import os
+import binascii
 from twisted.trial import unittest
 from twisted.application import service
+from twisted.internet import reactor
 
 import allmydata
 from allmydata.node import OldConfigError, OldConfigOptionError, MissingConfigEntry
 from allmydata import client
+from test_storage import FakeStatsProvider
+from allmydata.storage.server import StorageServer
+from allmydata.test.common import LoggingServiceParent
 from allmydata.storage_client import StorageFarmBroker
 from allmydata.util import base32, fileutil
 from allmydata.interfaces import IFilesystemNode, IFileNode, \
@@ -21,6 +26,10 @@ BASECONFIG = ("[client]\n"
 BASECONFIG_I = ("[client]\n"
               "introducer.furl = %s\n"
               )
+
+
+class IntroLessGridTest(GridTestMixin, NoNetworkGrid, unittest.TestCase):
+    pass
 
 class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
     def test_loadable(self):
@@ -93,6 +102,52 @@ class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
                        BASECONFIG + "[storage]\n" + "enabled = false\n")
         c = client.Client(basedir)
         self.failUnless(c.get_long_nodeid().startswith("v0-"))
+
+    def test_client_server_selection(self):
+
+        basedir = "client.Basic.test_clint_server_selection1_storage"
+        os.mkdir(basedir)
+
+        fileutil.write(os.path.join(basedir, "tahoe.cfg"), \
+                           BASECONFIG + \
+                           "[node]\n" + \
+                           "nickname = testgrid1/node3\n" + \
+                           "")
+
+        parent = LoggingMultiService()
+        parent.startService()
+        TestNode(basedir)
+
+
+        sparent = LoggingServiceParent()
+        sparent.startService()
+        storage_dir = os.path.join(basedir, "store")
+        ss = StorageServer(storage_dir, binascii.a2b_hex("412779e22264412471aa324f5e9801e90ba37a2d"),
+# BUG: fix this nodeid!
+                      reserved_space=10,
+                      stats_provider=FakeStatsProvider())
+
+        ss.setServiceParent(sparent)
+
+
+
+
+        basedir = "client.Basic.test_clint_server_selection1_client"
+        os.mkdir(basedir)
+        fileutil.write(os.path.join(basedir, "tahoe.cfg"), \
+                           BASECONFIG + \
+                           "[client-server-selection]\n" + \
+                           "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.type = tahoe-foolscap\n" + \
+                           "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.nickname = testgrid1/node3\n" + \
+                           "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.seed = lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q\n" + \
+                           "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.furl = pb://ietxtyrcmrasi4nkgjhv5gab5ef2g6rn@192.168.1.74:1238,127.0.0.1:1238,192.168.122.1:1238/ri7f2t4rpvglkw5dgk5hssbucfencgiq\n" + \
+                           "\n")
+
+        my_client = client.Client(basedir)
+        sb = my_client.get_storage_broker()
+        connected_servers = sb.get_connected_servers()
+        check_connected = lambda: self.failUnlessEqual(len(connected_servers),1)
+        reactor.callLater(0, check_connected)
 
     def test_reserved_1(self):
         basedir = "client.Basic.test_reserved_1"
