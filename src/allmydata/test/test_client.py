@@ -6,6 +6,7 @@ from twisted.internet import reactor
 
 import allmydata
 from allmydata.node import OldConfigError, OldConfigOptionError, MissingConfigEntry
+from allmydata.test.no_network import GridTestMixin
 from allmydata import client
 from test_storage import FakeStatsProvider
 from allmydata.storage.server import StorageServer
@@ -28,8 +29,33 @@ BASECONFIG_I = ("[client]\n"
               )
 
 
-class IntroLessGridTest(GridTestMixin, NoNetworkGrid, unittest.TestCase):
-    pass
+class IntroLessGridTest(GridTestMixin, unittest.TestCase):
+    def _set_up_nodes_extra_config(self, clientdir):
+        cfgfn = os.path.join(clientdir, "tahoe.cfg")
+        oldcfg = open(cfgfn, "r").read()
+        f = open(cfgfn, "wt")
+        f.write(oldcfg)
+
+        f.write("[client-server-selection]\n" + \
+                    "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.type = tahoe-foolscap\n" + \
+                    "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.nickname = testgrid1/node3\n" + \
+                    "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.seed = lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q\n" + \
+                    "server.v0-lupeeomaor5axug6g7utzfp4ag7ch6xp3ovpxq6vyufzbfmijg4q.furl = pb://ietxtyrcmrasi4nkgjhv5gab5ef2g6rn@127.0.0.1:1238/ri7f2t4rpvglkw5dgk5hssbucfencgiq\n" + \
+                    "\n")
+
+        f.write("\n")
+        f.write("[client]\n")
+        f.write("shares.needed = 2\n")
+        f.write("shares.total = 3\n")
+        f.write("\n")
+        f.close()
+        return None
+
+    def test_clientServer(self):
+        self.basedir = "test_client.IntroLessGridTest.clientServer"
+        os.mkdir(self.basedir)
+        hooks = {0: self._set_up_nodes_extra_config}
+        self.set_up_grid(client_config_hooks=hooks)
 
 class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
     def test_loadable(self):
