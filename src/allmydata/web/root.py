@@ -323,7 +323,7 @@ class Root(rend.Page):
         announcement = server.get_announcement()
         version = announcement["my-version"]
         _, _, hints, _ = referenceable.decode_furl(server.get_storage_furl())
-        addr = "%s (%s)" % ( addr, ",".join( "%s:%s" % ( host, port ) for (ipv, host, port) in hints ) )
+        addr = ",".join( hints )
         available_space = server.get_available_space()
         if available_space is None:
             available_space = "N/A"
