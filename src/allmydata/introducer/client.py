@@ -13,6 +13,9 @@ from allmydata.util import log
 from allmydata.util.rrefutil import add_version_to_remote_reference
 from allmydata.util.keyutil import BadSignatureError
 
+# XXX
+import endpoint_filter
+
 class WrapV2ClientInV1Interface(Referenceable): # for_v1
     """I wrap a v2 IntroducerClient to make it look like a v1 client, so it
     can be attached to an old server."""
@@ -282,7 +285,17 @@ class IntroducerClient(service.Service, Referenceable):
 
             self._process_announcement(ann, key_s)
 
+    def _convert_announcement_to_tor(self, ann):
+        """Convert locations to tor client endpoint descriptors
+        """
+
+        # XXX
+        if "anonymous-storage-FURL" in ann:
+            ann['anonymous-storage-FURL'] = endpoint_filter.furl_to_tor(ann['anonymous-storage-FURL'])
+        return ann
+
     def _process_announcement(self, ann, key_s):
+        ann = self._convert_announcement_to_tor(ann)
         self._debug_counts["inbound_announcement"] += 1
         service_name = str(ann["service-name"])
         if service_name not in self._subscribed_service_names:
