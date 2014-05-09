@@ -55,7 +55,7 @@ def hosts_for_rref(rref, ignore_localhost=True):
     # actually, this only returns hostnames
     advertised = []
     for hint in rref.getLocationHints():
-        assert isinstance(hint, str)
+        assert isinstance(hint, str), type(hint)
         host = get_host_from_endpoint(hint)
         if ignore_localhost and host == "127.0.0.1":
             continue
@@ -65,7 +65,7 @@ def hosts_for_rref(rref, ignore_localhost=True):
 def hosts_for_furl(furl, ignore_localhost=True):
     advertised = []
     for hint in SturdyRef(furl).locationHints:
-        assert isinstance(hint, str)
+        assert isinstance(hint, str), type(hint)
         host = get_host_from_endpoint(hint)
         if ignore_localhost and host == "127.0.0.1":
             continue
