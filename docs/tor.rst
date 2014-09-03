@@ -59,18 +59,30 @@ For Tahoe-LAFS storage servers there are three use-cases:
 Native Tor integration for Tahoe-LAFS
 =====================================
 
-Native Tor integration for Tahoe-LAFS utilizes the Twisted endpoints API:
-https://twistedmatrix.com/documents/current/core/howto/endpoints.html
+Native Tor integration for Tahoe-LAFS utilizes the Twisted endpoints API::
+* https://twistedmatrix.com/documents/current/core/howto/endpoints.html
 
 Twisted's endpoint parser plugin system is extensible via installing additional
 Twisted packages. The native Tor integration for Tahoe-LAFS uses 
-txsocksx and txtorcon.
+endpoint and parser plugins from the txsocksx and txtorcon modules.
+Although the Twisted endpoint API is very flexible it is missing a feature so that
+servers can be written in an endpoint agnostic style. We've opened a Twisted trac
+ticket for this feature here::
+* https://twistedmatrix.com/trac/ticket/7603
+
+Once this ticket is resolved then an additional changes can be made to Foolscap
+so that it's server side API is completely endpoint agnostic which will allow
+users to easily to use Tahoe-LAFS with many protocols on the server side.
 
 txsocksx will try to use the system tor's SOCKS port if available;
-attempts are made on ports 9050 and 9151.
+attempts are made on ports 9050 and 9151. Currently the maintainer of txsocksx
+has not merged in our code for the Tor client endpoint. We'll use
+this branch until the Tor endpoint code is merged upstream::
+* https://github.com/david415/txsocksx/tree/endpoint_parsers_retry_socks
 
 txtorcon will use the system tor control port to configure Tor Hidden Services
-( pending resolution of tor trac ticket https://trac.torproject.org/projects/tor/ticket/11291 )
+pending resolution of tor trac ticket 11291::
+* https://trac.torproject.org/projects/tor/ticket/11291
 
 See also Tahoe-LAFS Tor related tickets #1010 and #517.
 
