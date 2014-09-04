@@ -382,7 +382,7 @@ class Client(node.Node, pollmixin.PollMixin):
         # create a StorageFarmBroker object, for use by Uploader/Downloader
         # (and everybody else who wants to use storage servers)
         preferred_peers = [p.strip() for p in self.get_config("client", "peers.preferred", "").split(",") if p != ""]
-        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True, preferred_peers=preferred_peers)
+        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True, anonymize=self.anonymize, preferred_peers=preferred_peers)
         self.storage_broker = sb
 
         if self.config.has_section("client-server-selection"):
@@ -404,7 +404,7 @@ class Client(node.Node, pollmixin.PollMixin):
                 server_type = params.pop("type")
                 if server_type == "tahoe-foolscap":
                     ann = { 'nickname': server_params[serverid]['nickname'], 'anonymous-storage-FURL':server_params[serverid]['furl'], 'permutation-seed-base32':server_params[serverid]['seed'], 'service-name':'storage','my-version':'unknown'}
-                    s = storage_client.NativeStorageServer(serverid, ann.copy())
+                    s = storage_client.NativeStorageServer(serverid, ann.copy(), anonymize=self.anonymize)
                     sb._got_announcement(serverid, ann)
                     #add_server(s.get_serverid(), s)
                 else:

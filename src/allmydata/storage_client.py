@@ -63,11 +63,12 @@ class StorageFarmBroker:
     I'm also responsible for subscribing to the IntroducerClient to find out
     about new servers as they are announced by the Introducer.
     """
-    def __init__(self, tub, permute_peers, preferred_peers=()):
+    def __init__(self, tub, permute_peers, preferred_peers=(), anonymize=False):
         self.tub = tub
         assert permute_peers # False not implemented yet
         self.permute_peers = permute_peers
         self.preferred_peers = preferred_peers
+        self.anonymize = anonymize
         # self.servers maps serverid -> IServer, and keeps track of all the
         # storage servers that we've heard about. Each descriptor manages its
         # own Reconnector, and will give us a RemoteReference when we ask
@@ -94,7 +95,7 @@ class StorageFarmBroker:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann)
+        s = NativeStorageServer(key_s, ann, anonymize=self.anonymize)
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
         if old:
@@ -208,11 +209,12 @@ class NativeStorageServer:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann, min_shares=1):
+    def __init__(self, key_s, ann, min_shares=1, anonymize=False):
         self.key_s = key_s
 
         # XXX
-        ann["anonymous-storage-FURL"] = tor_only_rewrite(ann["anonymous-storage-FURL"])
+        if anonymize:
+            ann["anonymous-storage-FURL"] = tor_only_rewrite(ann["anonymous-storage-FURL"])
 
         self.announcement = ann
         self.min_shares = min_shares

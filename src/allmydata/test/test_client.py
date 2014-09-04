@@ -23,6 +23,47 @@ BASECONFIG_I = ("[client]\n"
               )
 
 class Basic(testutil.ReallyEqualMixin, unittest.TestCase):
+
+    def test_tor_anonymize_config(self):
+        basedir = "test_client.Basic.test_tor_anonymize_config"
+        os.mkdir(basedir)
+        fileutil.write(os.path.join(basedir, "tahoe.cfg"),
+                       """[client]
+introducer.furl = 
+anonymize = True
+[storage]
+enabled = false
+reserved_space = bogus
+[client-server-selection]
+...
+""")
+        fileutil.write(os.path.join(basedir, "introducer.furl"), "")
+        fileutil.write(os.path.join(basedir, "no_storage"), "")
+        fileutil.write(os.path.join(basedir, "readonly_storage"), "")
+        fileutil.write(os.path.join(basedir, "debug_discard_storage"), "")
+
+        client.Client(basedir)
+        client.init_client_storage_broker()
+
+
+    def test_tor_anonymize(self):
+        basedir = "test_client.Basic.test_tor_anonymize"
+        os.mkdir(basedir)
+        fileutil.write(os.path.join(basedir, "tahoe.cfg"),
+                       "[client]\n" +
+                       "introducer.furl = \n" +
+                       "anonymize = True\n" +
+                       "[storage]\n" +
+                       "enabled = false\n" +
+                       "reserved_space = bogus\n")
+        fileutil.write(os.path.join(basedir, "introducer.furl"), "")
+        fileutil.write(os.path.join(basedir, "no_storage"), "")
+        fileutil.write(os.path.join(basedir, "readonly_storage"), "")
+        fileutil.write(os.path.join(basedir, "debug_discard_storage"), "")
+
+        client.Client(basedir)
+        client.init_client_storage_broker()
+
     def test_loadable(self):
         basedir = "test_client.Basic.test_loadable"
         os.mkdir(basedir)
