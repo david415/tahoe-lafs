@@ -277,3 +277,36 @@ once Tor is restarted, the ``.onion`` hostname will be in
 
   tub.port = 8098
   tub.location = ualhejtq2p7ohfbb.onion:29212
+
+**Troubleshooting**
+
+On some NetBSD systems, torsocks may segfault::
+
+  $ torsocks telnet www.google.com 80
+  Segmentation fault (core dumped)
+
+and backtraces show looping libc and syscalls::
+
+  #7198 0xbbbda26e in *__socket30 (domain=2, type=1, protocol=6) at socket.c:64
+  #7199 0xbb84baf9 in socket () from /usr/lib/libc.so.12
+  #7200 0xbbbda19b in tsocks_socket (domain=2, type=1, protocol=6) at socket.c:56
+  #7201 0xbbbda26e in *__socket30 (domain=2, type=1, protocol=6) at socket.c:64
+  #7202 0xbb84baf9 in socket () from /usr/lib/libc.so.12
+  [...etc...]
+
+This has to do with the nature of the torsocks socket() call wrapper being unaware
+of NetBSD's internal binary backwards compatibility.
+
+Information on a the first parts of a solution patch can be found in a tor-dev
+thread here from Thomas Klausner:
+
+* https://lists.torproject.org/pipermail/tor-dev/2013-November/005741.html
+
+As of this writing, torsocks still exists in the pkgsrc wip tree here:
+
+* http://pkgsrc.se/wip/torsocks
+
+but the NetBSD-specific patches have been merged upstream into torsocks as of commitid 6adfba809267d9c217906d6974468db22293ab9b:
+
+* https://gitweb.torproject.org/torsocks.git/commit/6adfba809267d9c217906d6974468db22293ab9b
+
