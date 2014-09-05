@@ -8,7 +8,7 @@ from mock import patch
 
 from foolscap.api import flushEventualQueue
 from twisted.application import service
-from allmydata.node import Node, formatTimeTahoeStyle, MissingConfigEntry, AnonymityDangerConfig
+from allmydata.node import Node, formatTimeTahoeStyle, MissingConfigEntry, AnonymityDangerError
 from allmydata.util import fileutil
 import allmydata.test.common_util as testutil
 
@@ -135,29 +135,29 @@ class TestCase(testutil.SignalMixin, unittest.TestCase):
         fileutil.make_dirs(basedir)
         f = open(os.path.join(basedir, 'tahoe.cfg'), 'wt')
         f.write("[node]\n")
-        f.write("tub.anonymize = True\n")
+        f.write("anonymize = True\n")
         f.close()
-        self.failUnlessRaises(AnonymityDangerConfig, lambda: TestNode(basedir))
+        self.failUnlessRaises(AnonymityDangerError, lambda: TestNode(basedir))
 
     def test_anonymize_autodetect(self):
         basedir = "test_node/test_anonymize_autodetect"
         fileutil.make_dirs(basedir)
         f = open(os.path.join(basedir, 'tahoe.cfg'), 'wt')
         f.write("[node]\n")
-        f.write("tub.anonymize = true\n")
+        f.write("anonymize = true\n")
         f.write("tub.location = AUTODETECT\n")
         f.close()
-        self.failUnlessRaises(AnonymityDangerConfig, lambda: TestNode(basedir))
+        self.failUnlessRaises(AnonymityDangerError, lambda: TestNode(basedir))
 
     def test_anonymize_tcp(self):
         basedir = "test_node/test_anonymize_tcp"
         fileutil.make_dirs(basedir)
         f = open(os.path.join(basedir, 'tahoe.cfg'), 'wt')
         f.write("[node]\n")
-        f.write("tub.anonymize = true\n")
+        f.write("anonymize = true\n")
         f.write("tub.location = tcp:myhostname:6669\n")
         f.close()
-        self.failUnlessRaises(AnonymityDangerConfig, lambda: TestNode(basedir))
+        self.failUnlessRaises(AnonymityDangerError, lambda: TestNode(basedir))
 
     def test_tahoe_cfg_utf8(self):
         basedir = "test_node/test_tahoe_cfg_utf8"

@@ -41,7 +41,7 @@ the files.   See the 'configuration.rst' documentation file for details."""
 class _None: # used as a marker in get_config()
     pass
 
-class AnonymityDangerConfig(Exception):
+class AnonymityDangerError(Exception):
     """ node.anonymize was set however the current configuration is unsafe. """
 
 class MissingConfigEntry(Exception):
@@ -167,7 +167,6 @@ class Node(service.MultiService):
 
         cfg_anonymize = self.get_config("node", "anonymize", False, boolean=True)
         if cfg_anonymize:
-            # XXX
             self.anonymize = True
             self.check_anonymity_config()
 
@@ -193,7 +192,7 @@ class Node(service.MultiService):
         if not is_anonymous(location):
             is_err = True
         if is_err:
-            raise AnonymityDangerConfig("tub.location must be set to either unreachable or a valid anonymous server endpoint string")
+            raise AnonymityDangerError("tub.location must be set to either unreachable or a valid anonymous server endpoint string")
 
     def error_about_old_config_files(self):
         """ If any old configuration files are detected, raise OldConfigError. """
