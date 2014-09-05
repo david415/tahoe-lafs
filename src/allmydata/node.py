@@ -5,6 +5,7 @@ from twisted.python import log as twlog
 from twisted.application import service
 from twisted.internet import defer, reactor
 from foolscap.api import Tub, eventually, app_versions
+from foolscap.tokens import UNREACHABLE
 import foolscap.logging.log
 from allmydata import get_package_versions, get_package_versions_string
 from allmydata.util import log
@@ -233,7 +234,9 @@ class Node(service.MultiService):
         self.write_config("my_nodeid", b32encode(self.nodeid).lower() + "\n")
         self.short_nodeid = b32encode(self.nodeid).lower()[:8] # ready for printing
         tubport = self.get_config("node", "tub.port", "tcp:0")
-        self.tub.listenOn(tubport)
+
+        if not self.anonymize:
+            self.tub.listenOn(tubport)
         # we must wait until our service has started before we can find out
         # our IP address and thus do tub.setLocation, and we can't register
         # any services with the Tub until after that point
@@ -347,15 +350,19 @@ class Node(service.MultiService):
         self.log("Node._startService")
 
         service.MultiService.startService(self)
-        d = defer.succeed(None)
+        location = self.get_config("node", "tub.location", None)
 
-        if not self.anonymize:
-            location = self.get_config("node", "tub.location", None)
-            if location == "AUTODETECT" or location is None:
-                self.set_config("node", "tub.location", "")
-                d.addCallback(lambda res: iputil.get_local_addresses_async())
-
-        d.addCallback(self._setup_tub)
+        d = defer.Deferred()
+        if location == "UNREACHABLE":
+            d.addCallback(lambda x: self._unreachable_tub())
+            d.callback(None)
+        else:
+            if not self.anonymize:
+                if location == "AUTODETECT" or location is None:
+                    d.addCallback(lambda res: iputil.get_local_addresses_async())
+                    d.addCallback(self._autodetect)
+            d.addCallback(self._setup_tub)
+            d.callback(location)
 
         def _ready(res):
             self.log("%s running" % self.NODETYPE)
@@ -420,36 +427,30 @@ class Node(service.MultiService):
     def log(self, *args, **kwargs):
         return log.msg(*args, **kwargs)
 
-    def _setup_tub(self, local_addresses):
 
-        location = self.get_config("node", "tub.location", None)
-        if location == "UNREACHABLE":
-            self.set_config("node", "tub.location", "")
-
-        if self.anonymize:
-            if location is not None:
-                self.tub.setLocation(location)
-            return self.tub
-
-        # we can't get a dynamically-assigned portnum until our Tub is
-        # running, which means after startService.
-        l = self.tub.getListeners()[0]
-        portnum = l.getPortnum()
-        # record which port we're listening on, so we can grab the same one
-        # next time
-        fileutil.write_atomically(self._portnumfile, "%d\n" % portnum, mode="")
-
-
+    def _autodetect(self, local_addresses):
         if local_addresses is not None:
-            base_location = ",".join([ "%s:%d" % (addr, portnum)
+            # we can't get a dynamically-assigned portnum until our Tub is
+            # running, which means after startService.
+            l = self.tub.getListeners()[0]
+            portnum = l.getPortnum()
+            # record which port we're listening on, so we can grab the same one
+            # next time
+            fileutil.write_atomically(self._portnumfile, "%d\n" % portnum, mode="")
+            location = ",".join([ "%s:%d" % (addr, portnum)
                                        for addr in local_addresses ])
-            location = self.get_config("node", "tub.location", base_location)
+            return location
         else:
-            location = self.get_config("node", "tub.location", "")
+            return None
 
-        self.log("Tub location set to %s" % location)
-        self.tub.setLocation(location)
+    def _unreachable_tub(self):
+        self.log("Tub's location is unreachable.")
+        self.tub.setLocation(UNREACHABLE)
+        return self.tub
 
+    def _setup_tub(self, locations):
+        self.log("Tub location set to %s" % locations)
+        self.tub.setLocation(locations)
         return self.tub
 
     def when_tub_ready(self):

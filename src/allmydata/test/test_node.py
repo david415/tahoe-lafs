@@ -6,6 +6,7 @@ from twisted.python import log
 
 from mock import patch
 
+from foolscap.tokens import UnreachableLocationError
 from foolscap.api import flushEventualQueue
 from twisted.application import service
 from allmydata.node import Node, formatTimeTahoeStyle, MissingConfigEntry, AnonymityDangerError
@@ -85,8 +86,7 @@ class TestCase(testutil.SignalMixin, unittest.TestCase):
         d = n.when_tub_ready()
 
         def _check_addresses(ignored_result):
-            furl = n.tub.registerReference(n)
-            self.failUnless("@/" in furl, furl)
+            self.failUnlessRaises(UnreachableLocationError, lambda: n.tub.registerReference(n))
 
         d.addCallback(_check_addresses)
         return d
