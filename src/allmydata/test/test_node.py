@@ -110,6 +110,25 @@ class TestCase(testutil.SignalMixin, unittest.TestCase):
         d.addCallback(_check_addresses)
         return d
 
+    def test_location_i2p(self):
+        basedir = "test_node/test_i2p"
+        fileutil.make_dirs(basedir)
+        f = open(os.path.join(basedir, 'tahoe.cfg'), 'wt')
+        f.write("[node]\n")
+        f.write("tub.location = i2p:test.keys\n")
+        f.close()
+
+        n = TestNode(basedir)
+        n.setServiceParent(self.parent)
+        d = n.when_tub_ready()
+
+        def _check_addresses(ignored_result):
+            furl = n.tub.registerReference(n)
+            self.failUnless("i2p:" in furl, furl)
+
+        d.addCallback(_check_addresses)
+        return d
+
     def test_autodetect(self):
         basedir = "test_node/test_autodetect"
         fileutil.make_dirs(basedir)
