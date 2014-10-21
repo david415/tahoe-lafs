@@ -1,0 +1,60 @@
+
+# this was constructed by doing:
+#  pip install .
+#  pip freeze >requirements.txt
+#  then clobber the venv
+#  peep install -r requirements.txt
+#   that complains about missing hashes and prints this to stdout(err?)
+
+# sha256: HYsSJqylq-M-44GEevNkayzxeY7Q2CwTzjr07ZWHoGw
+Nevow==0.11.1
+
+# sha256: vf2WGsIhb1xlsH8sOl5RFvZxO4wc8HbEABDGSBDSaWM
+Twisted==14.0.0
+
+# sha256: gZI5NkD3vDBM6CZps165BZJWajCru0kkRW9SB5r8GOI
+cffi==0.8.2
+
+# sha256: Xvgd5EyHqHd5cQy7R2_77IakpsC9Klvr7Mw7-zw0eOU
+cryptography==0.4
+
+# sha256: dLKD3WijydaOv06bTr9c-zdICRW2qAiskw_oWKZvjZk
+foolscap==0.6.4
+
+# sha256: uDndLZwRfHAUMMFJlWkYpCOphjtIsJyQ4wpgE-fS9E8
+mock==1.0.1
+
+# sha256: qZ245ZwSATitinLuztzCS0UQ0u7TzkghO34y8izE7m4
+pyOpenSSL==0.14
+
+# sha256: lX2YtmHAtktYCrb5SxJeCbZxQVTuUd5AvKFtPwB2uGw
+pycparser==2.10
+
+# sha256: EWFYkXvSQ9onAc_rqaY3SFS8mlmdFGbhotut83yAIFk
+pycryptopp==0.6.0.1206569328141510525648634803928199668821045408958
+
+# sha256: DKlcuFhDxbCfe2W1vWxC0ZQOGWZ7B2YgWFrEWr5PT7s
+pyutil==2.0.0
+
+# sha256: qA3JAyDhwbjqzqqnVa4q7TgtZKWTIa6fbdvgMhwCh4o
+simplejson==3.5.3
+
+# sha256: M4j8GiynpdQmG00ePYtzQsv0vxz7NwIxHGCTIUMs7Xg
+six==1.7.3
+
+# sha256: myXDS6WGy7rUUXr1FucjWZpvOPxWD0eXhVpfMFHmQi8
+zbase32==1.1.5
+
+# sha256: 4-mebmesmvcsD5GPA9IFHhfUH0juATTQ0sgef-knSc8
+zfec==1.4.24
+
+# sha256: kcunt818uC9vTgI_53-U3D30rlKH_VXe8hSNwjLQx9o
+zope.interface==4.1.1
+
+# twisted.conch needs pycrypto and pyasn1, but does not declare them
+# sha256: 8s4emJsnLPy2d2FnY-Ci5-xlnv-meoiqkrOmVSj2Cjw
+pycrypto==2.6.1
+
+# sha256: 5PgdU8Uz9r2VJrBH8Ef3sQHCSrFzOcGnrY-YslwQHqs
+pyasn1==0.1.7
+
