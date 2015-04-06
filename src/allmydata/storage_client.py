@@ -62,20 +62,23 @@ class StorageFarmBroker:
     I'm also responsible for subscribing to the IntroducerClient to find out
     about new servers as they are announced by the Introducer.
     """
-    def __init__(self, tub, permute_peers):
+    def __init__(self, tub, permute_peers, connected_thresh, connected_deferred):
         self.tub = tub
         assert permute_peers # False not implemented yet
         self.permute_peers = permute_peers
+        self.connected_thresh = connected_thresh
+        self.connected_deferred = connected_deferred
         # self.servers maps serverid -> IServer, and keeps track of all the
         # storage servers that we've heard about. Each descriptor manages its
         # own Reconnector, and will give us a RemoteReference when we ask
         # them for it.
         self.servers = {}
+        self.servers_connected = 0
         self.introducer_client = None
 
     # these two are used in unit tests
     def test_add_rref(self, serverid, rref, ann):
-        s = NativeStorageServer(serverid, ann.copy())
+        s = NativeStorageServer(serverid, ann.copy(), self)
         s.rref = rref
         s._is_connected = True
         self.servers[serverid] = s
@@ -92,7 +95,7 @@ class StorageFarmBroker:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann)
+        s = NativeStorageServer(key_s, ann, self)
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
         if old:
@@ -118,6 +121,15 @@ class StorageFarmBroker:
         for dsc in self.servers.values():
             dsc.try_to_connect()
 
+    def increment_connected(self):
+        self.servers_connected += 1
+        if self.connected_deferred != None:
+            if self.servers_connected => self.connected_thresh:
+                self.connected_deferred.callback(self.servers_connected)
+
+    def decrement_connected(self):
+        self.servers_connected -= 1
+
     def get_servers_for_psi(self, peer_selection_index):
         # return a list of server objects (IServers)
         assert self.permute_peers == True
@@ -130,7 +142,7 @@ class StorageFarmBroker:
         return frozenset(self.servers.keys())
 
     def get_connected_servers(self):
-        return frozenset([s for s in self.servers.values() if s.is_connected()])
+        return self.servers_connected
 
     def get_known_servers(self):
         return frozenset(self.servers.values())
@@ -187,9 +199,10 @@ class NativeStorageServer:
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann):
+    def __init__(self, key_s, ann, broker):
         self.key_s = key_s
         self.announcement = ann
+        self.broker = broker
 
         assert "anonymous-storage-FURL" in ann, ann
         furl = str(ann["anonymous-storage-FURL"])
@@ -292,6 +305,7 @@ class NativeStorageServer:
         d.addCallback(self._got_versioned_service, lp)
         d.addErrback(log.err, format="storageclient._got_connection",
                      name=self.get_name(), umid="Sdq3pg")
+        self.broker.increment_connected()
 
     def _got_versioned_service(self, rref, lp):
         log.msg(format="%(name)s provided version info %(version)s",
@@ -319,6 +333,7 @@ class NativeStorageServer:
         # use s.get_rref().callRemote() and not worry about it being None.
         self._is_connected = False
         self.remote_host = None
+        self.broker.decrement_connected()
 
     def stop_connecting(self):
         # used when this descriptor has been superceded by another
