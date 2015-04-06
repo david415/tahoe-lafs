@@ -130,6 +130,7 @@ class Client(node.Node, pollmixin.PollMixin):
 
     def __init__(self, basedir="."):
         node.Node.__init__(self, basedir)
+        self.uploadReadyDeferred = defer.Deferred()
         self.started_timestamp = time.time()
         self.logSource="Client"
         self.encoding_params = self.DEFAULT_ENCODING_PARAMETERS.copy()
@@ -341,8 +342,6 @@ class Client(node.Node, pollmixin.PollMixin):
         self.init_blacklist()
         self.init_nodemaker()
 
-    def set_u
-
     def init_client_storage_broker(self):
         # create a StorageFarmBroker object, for use by Uploader/Downloader
         # (and everybody else who wants to use storage servers)
@@ -351,9 +350,13 @@ class Client(node.Node, pollmixin.PollMixin):
         else:
             connection_thresh = int(self.get_config("client", "shares.happy", DEP["happy"]))
 
-        thresh_deferred.addCallback(self.connected_thresh)
+        # add callbacks to our uploadReadydeferred so that
+        # we begin processing the upload queue immediately after we
+        # have connect to a sufficient number of servers for uploading.
+        # XXX
+        #self.uploadReadyDeferred.addCallback(...)
 
-        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True, connection_thresh, thresh_deferred)
+        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True, connection_thresh, self.uploadReadyDeferred)
         self.storage_broker = sb
 
         # load static server specifications from tahoe.cfg, if any.
@@ -507,6 +510,9 @@ class Client(node.Node, pollmixin.PollMixin):
             try:
                 from allmydata.frontends import drop_upload
                 s = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
+                # start processing the upload queue when we've connected to enough servers
+                self.uploadReadyDeferred.addCallback(s.UploadReady)
+
                 s.setServiceParent(self)
                 s.startService()
             except Exception, e:

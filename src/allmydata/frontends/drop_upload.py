@@ -35,6 +35,8 @@ class DropUploader(service.MultiService):
         self._convergence = client.convergence
         self._local_path = FilePath(local_dir)
 
+        self._upload_queue = defer.Deferred()
+
         if inotify is None:
             from twisted.internet import inotify
         self._inotify = inotify
@@ -68,11 +70,15 @@ class DropUploader(service.MultiService):
         self._stats_provider.count('drop_upload.dirs_monitored', 1)
         return d
 
+    def UploadReady(self):
+        self._upload_queue.callback(True)
+
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
 
         self._stats_provider.count('drop_upload.files_queued', 1)
-        eventually(self._process, opaque, path, events_mask)
+        self._upload_queue.addCallback(self._process, opaque, path, events_mask)
+
 
     def _process(self, opaque, path, events_mask):
         d = defer.succeed(None)
