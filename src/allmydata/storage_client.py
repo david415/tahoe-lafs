@@ -124,7 +124,7 @@ class StorageFarmBroker:
     def increment_connected(self):
         self.servers_connected += 1
         if self.connected_deferred != None:
-            if self.servers_connected => self.connected_thresh:
+            if self.servers_connected >= self.connected_thresh:
                 self.connected_deferred.callback(self.servers_connected)
 
     def decrement_connected(self):

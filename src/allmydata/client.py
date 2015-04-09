@@ -345,10 +345,16 @@ class Client(node.Node, pollmixin.PollMixin):
     def init_client_storage_broker(self):
         # create a StorageFarmBroker object, for use by Uploader/Downloader
         # (and everybody else who wants to use storage servers)
-        if int(self.get_config("client", "shares.happy", DEP["happy"])) > int(self.get_config("client", "shares.needed", DEP["needed"])):
-            connection_thresh = int(self.get_config("client", "shares.happy", DEP["happy"])) + 1
+
+        DEP = self.encoding_params
+        DEP["k"] = int(self.get_config("client", "shares.needed", DEP["k"]))
+        DEP["n"] = int(self.get_config("client", "shares.total", DEP["n"]))
+        DEP["happy"] = int(self.get_config("client", "shares.happy", DEP["happy"]))
+
+        if DEP["happy"] > DEP["k"]:
+            connection_thresh = DEP["happy"] + 1
         else:
-            connection_thresh = int(self.get_config("client", "shares.happy", DEP["happy"]))
+            connection_thresh = DEP["happy"]
 
         # add callbacks to our uploadReadydeferred so that
         # we begin processing the upload queue immediately after we
@@ -356,7 +362,7 @@ class Client(node.Node, pollmixin.PollMixin):
         # XXX
         #self.uploadReadyDeferred.addCallback(...)
 
-        sb = storage_client.StorageFarmBroker(self.tub, permute_peers=True, connection_thresh, self.uploadReadyDeferred)
+        sb = storage_client.StorageFarmBroker(self.tub, True, connection_thresh, self.uploadReadyDeferred)
         self.storage_broker = sb
 
         # load static server specifications from tahoe.cfg, if any.
