@@ -30,6 +30,7 @@ class DropUploader(service.MultiService):
                                  "could not be represented in the filesystem encoding."
                                  % quote_output(local_dir_utf8))
 
+        self._pending = set()
         self._client = client
         self._stats_provider = client.stats_provider
         self._convergence = client.convergence
@@ -79,8 +80,9 @@ class DropUploader(service.MultiService):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
 
         self._stats_provider.count('drop_upload.files_queued', 1)
-        self._upload_queue.addCallback(self._process, opaque, path, events_mask)
-
+        if path not in self._pending:
+            self._upload_queue.addCallback(self._process, opaque, path, events_mask)
+            self._pending.add(path)
 
     def _process(self, opaque, path, events_mask):
         d = defer.succeed(None)
@@ -94,6 +96,7 @@ class DropUploader(service.MultiService):
                 name = name.decode(get_filesystem_encoding())
 
             u = FileName(path.path, self._convergence)
+            self._pending.remove(path)
             return self._parent.add_file(name, u)
         d.addCallback(_add_file)
 
