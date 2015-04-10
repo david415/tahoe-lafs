@@ -503,12 +503,12 @@ class Client(node.Node, pollmixin.PollMixin):
 
             try:
                 from allmydata.frontends import drop_upload
-                self._drop_uploader = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
+                s = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
                 # start processing the upload queue when we've connected to enough servers
-                self.uploadReadyDeferred.addCallback(lambda ignored: self._drop_uploader.UploadReady())
+                self.uploadReadyDeferred.addCallback(s.ReadyToUploadDeferred)
 
-                self._drop_uploader.setServiceParent(self)
-                self._drop_uploader.startService()
+                s.setServiceParent(self)
+                s.startService()
             except Exception, e:
                 self.log("couldn't start drop-uploader: %r", args=(e,))
 

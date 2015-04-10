@@ -70,8 +70,10 @@ class DropUploader(service.MultiService):
         self._stats_provider.count('drop_upload.dirs_monitored', 1)
         return d
 
-    def UploadReady(self):
-        self._upload_queue.callback(True)
+    def ReadyToUploadDeferred(self, ignore):
+        d = defer.Deferred()
+        d.addCallback(lambda ign: self._upload_queue.callback(True))
+        return d
 
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
