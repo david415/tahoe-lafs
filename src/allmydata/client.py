@@ -349,12 +349,6 @@ class Client(node.Node, pollmixin.PollMixin):
         connection_threshold = min(self.encoding_params["k"],
                                    self.encoding_params["happy"] + 1)
 
-        # add callbacks to our uploadReadydeferred so that
-        # we begin processing the upload queue immediately after we
-        # have connect to a sufficient number of servers for uploading.
-        # XXX
-        #self.uploadReadyDeferred.addCallback(...)
-
         sb = storage_client.StorageFarmBroker(self.tub, True, connection_threshold,
                                               self.uploadReadyDeferred)
         self.storage_broker = sb
@@ -509,12 +503,12 @@ class Client(node.Node, pollmixin.PollMixin):
 
             try:
                 from allmydata.frontends import drop_upload
-                s = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
+                self._drop_uploader = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
                 # start processing the upload queue when we've connected to enough servers
-                self.uploadReadyDeferred.addCallback(lambda ignored: s.UploadReady())
+                self.uploadReadyDeferred.addCallback(lambda ignored: self._drop_uploader.UploadReady())
 
-                s.setServiceParent(self)
-                s.startService()
+                self._drop_uploader.setServiceParent(self)
+                self._drop_uploader.startService()
             except Exception, e:
                 self.log("couldn't start drop-uploader: %r", args=(e,))
 
