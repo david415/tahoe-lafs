@@ -122,6 +122,7 @@ class StorageFarmBroker:
             dsc.try_to_connect()
 
     def increment_connected(self):
+        print "increment_connected"
         self.servers_connected += 1
         if (self.connected_d is not None and
             self.servers_connected >= self.connected_threshold):
@@ -130,6 +131,7 @@ class StorageFarmBroker:
             d.callback(self.servers_connected)
 
     def decrement_connected(self):
+        print "decrement_connected"
         self.servers_connected -= 1
 
     def get_servers_for_psi(self, peer_selection_index):

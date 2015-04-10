@@ -511,7 +511,7 @@ class Client(node.Node, pollmixin.PollMixin):
                 from allmydata.frontends import drop_upload
                 s = drop_upload.DropUploader(self, upload_dircap, local_dir_utf8)
                 # start processing the upload queue when we've connected to enough servers
-                self.uploadReadyDeferred.addCallback(s.UploadReady)
+                self.uploadReadyDeferred.addCallback(lambda ignored: s.UploadReady())
 
                 s.setServiceParent(self)
                 s.startService()
