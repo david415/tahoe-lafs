@@ -142,7 +142,7 @@ class StorageFarmBroker:
         return frozenset(self.servers.keys())
 
     def get_connected_servers(self):
-        return self.servers_connected
+        return frozenset([s for s in self.servers.values() if s.is_connected()])
 
     def get_known_servers(self):
         return frozenset(self.servers.values())
