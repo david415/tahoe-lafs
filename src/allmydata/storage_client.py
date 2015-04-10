@@ -62,12 +62,12 @@ class StorageFarmBroker:
     I'm also responsible for subscribing to the IntroducerClient to find out
     about new servers as they are announced by the Introducer.
     """
-    def __init__(self, tub, permute_peers, connected_thresh, connected_deferred):
+    def __init__(self, tub, permute_peers, connected_threshold, connected_d):
         self.tub = tub
         assert permute_peers # False not implemented yet
         self.permute_peers = permute_peers
-        self.connected_thresh = connected_thresh
-        self.connected_deferred = connected_deferred
+        self.connected_threshold = connected_threshold
+        self.connected_d = connected_d
         # self.servers maps serverid -> IServer, and keeps track of all the
         # storage servers that we've heard about. Each descriptor manages its
         # own Reconnector, and will give us a RemoteReference when we ask
@@ -123,9 +123,9 @@ class StorageFarmBroker:
 
     def increment_connected(self):
         self.servers_connected += 1
-        if self.connected_deferred != None:
-            if self.servers_connected >= self.connected_thresh:
-                self.connected_deferred.callback(self.servers_connected)
+        if self.connected_d != None:
+            if self.servers_connected >= self.connected_threshold:
+                self.connected_d.callback(self.servers_connected)
 
     def decrement_connected(self):
         self.servers_connected -= 1
