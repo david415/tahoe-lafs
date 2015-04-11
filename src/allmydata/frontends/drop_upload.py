@@ -60,7 +60,7 @@ class DropUploader(service.MultiService):
         # be an IN_CLOSE_WRITE after an IN_CREATE (I think).
         # TODO: what about IN_MOVE_SELF or IN_UNMOUNT?
         mask = inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_ONLYDIR
-        self._notifier.watch(self._local_path, mask=mask, callbacks=[self._notify])
+        self._notifier.watch(self._local_path, mask=mask, callbacks=[self._notify], autoAdd=True)
 
     def startService(self):
         service.MultiService.startService(self)
