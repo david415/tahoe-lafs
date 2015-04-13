@@ -70,9 +70,10 @@ class DropUploader(service.MultiService):
         return d
 
     def ReadyToUploadDeferred(self, ignore):
-        d = defer.Deferred()
-        d.addCallback(lambda ign: self._upload_queue.callback(True))
-        return d
+        print "start ReadyToUploadDeferred"
+        self._upload_queue.callback(True)
+        print "end ReadyToUploadDeferred"
+        return None
 
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
