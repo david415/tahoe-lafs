@@ -44,7 +44,7 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
                                          inotify=self.inotify)
             self.uploader.setServiceParent(self.client)
             self.uploader.startService()
-            self.uploader.ReadyToUploadDeferred(True)
+            self.uploader.upload_ready(True)
             return None
         d.addCallback(_made_upload_dir)
 
