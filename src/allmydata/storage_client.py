@@ -73,7 +73,6 @@ class StorageFarmBroker:
         # own Reconnector, and will give us a RemoteReference when we ask
         # them for it.
         self.servers = {}
-        self.servers_connected = 0
         self.introducer_client = None
 
     # these two are used in unit tests
@@ -121,18 +120,13 @@ class StorageFarmBroker:
         for dsc in self.servers.values():
             dsc.try_to_connect()
 
-    def increment_connected(self):
-        print "increment_connected"
-        self.servers_connected += 1
+    def check_enough_connected(self):
+        print "check_enough_connected"
         if (self.connected_d is not None and
-            self.servers_connected >= self.connected_threshold):
+            len(self.get_connected_servers()) >= self.connected_threshold):
             d = self.connected_d
             self.connected_d = None
             d.callback(self.servers_connected)
-
-    def decrement_connected(self):
-        print "decrement_connected"
-        self.servers_connected -= 1
 
     def get_servers_for_psi(self, peer_selection_index):
         # return a list of server objects (IServers)
@@ -307,9 +301,9 @@ class NativeStorageServer:
         default = self.VERSION_DEFAULTS
         d = add_version_to_remote_reference(rref, default)
         d.addCallback(self._got_versioned_service, lp)
+        d.addCallback(lambda ign: self.broker.check_enough_connected())
         d.addErrback(log.err, format="storageclient._got_connection",
                      name=self.get_name(), umid="Sdq3pg")
-        self.broker.increment_connected()
 
     def _got_versioned_service(self, rref, lp):
         log.msg(format="%(name)s provided version info %(version)s",
@@ -337,7 +331,6 @@ class NativeStorageServer:
         # use s.get_rref().callRemote() and not worry about it being None.
         self._is_connected = False
         self.remote_host = None
-        self.broker.decrement_connected()
 
     def stop_connecting(self):
         # used when this descriptor has been superceded by another
