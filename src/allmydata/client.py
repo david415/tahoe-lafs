@@ -130,7 +130,7 @@ class Client(node.Node, pollmixin.PollMixin):
 
     def __init__(self, basedir="."):
         node.Node.__init__(self, basedir)
-        self.uploadReadyDeferred = defer.Deferred()
+        self.upload_ready_d = defer.Deferred()
         self.started_timestamp = time.time()
         self.logSource="Client"
         self.encoding_params = self.DEFAULT_ENCODING_PARAMETERS.copy()
@@ -350,7 +350,7 @@ class Client(node.Node, pollmixin.PollMixin):
                                    self.encoding_params["happy"] + 1)
 
         sb = storage_client.StorageFarmBroker(self.tub, True, connection_threshold,
-                                              self.uploadReadyDeferred)
+                                              self.upload_ready_d)
         self.storage_broker = sb
 
         # load static server specifications from tahoe.cfg, if any.
@@ -508,7 +508,7 @@ class Client(node.Node, pollmixin.PollMixin):
                 s.startService()
 
                 # start processing the upload queue when we've connected to enough servers
-                self.uploadReadyDeferred.addCallback(s.ReadyToUploadDeferred)
+                self.upload_ready_d.addCallback(s.upload_ready)
             except Exception, e:
                 self.log("couldn't start drop-uploader: %r", args=(e,))
 

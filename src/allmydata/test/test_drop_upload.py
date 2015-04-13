@@ -42,9 +42,10 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
             self.upload_dircap = n.get_uri()
             self.uploader = DropUploader(self.client, self.upload_dircap, self.local_dir.encode('utf-8'),
                                          inotify=self.inotify)
-            self.uploader.ReadyToUploadDeferred(None)
-            print "end of _made_upload_dir"
-            return self.uploader.startService()
+            self.uploader.setServiceParent(self.client)
+            self.uploader.startService()
+            self.uploader.ReadyToUploadDeferred(True)
+            return None
         d.addCallback(_made_upload_dir)
 
         # Write something short enough for a LIT file.
@@ -77,7 +78,6 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         return d
 
     def _test_file(self, name_u, data, temporary=False):
-        print "start of _test_file"
         previously_uploaded = self._get_count('drop_upload.files_uploaded')
         previously_disappeared = self._get_count('drop_upload.files_disappeared')
 
@@ -119,8 +119,6 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
                                                                  previously_uploaded + 1))
 
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.files_queued'), 0))
-
-        print "end of _test_file"
         return d
 
 
@@ -165,7 +163,7 @@ class MockTest(DropUploadTestMixin, unittest.TestCase):
         return self._test()
 
     def notify_close_write(self, path):
-        print "notify_close_write"
+        print "mock notify_close_write"
         self.uploader._notifier.event(path, self.inotify.IN_CLOSE_WRITE)
 
 
