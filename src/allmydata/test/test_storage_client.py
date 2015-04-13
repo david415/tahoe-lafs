@@ -1,6 +1,5 @@
 
 from twisted.trial import unittest
-from twisted.internet import defer
 from allmydata.storage_client import NativeStorageServer
 
 

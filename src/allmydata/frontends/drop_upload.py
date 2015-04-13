@@ -4,7 +4,6 @@ import sys
 from twisted.internet import defer
 from twisted.python.filepath import FilePath
 from twisted.application import service
-from foolscap.api import eventually
 
 from allmydata.interfaces import IDirectoryNode
 
