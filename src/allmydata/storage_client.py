@@ -121,12 +121,11 @@ class StorageFarmBroker:
             dsc.try_to_connect()
 
     def check_enough_connected(self):
-        print "check_enough_connected"
         if (self.connected_d is not None and
             len(self.get_connected_servers()) >= self.connected_threshold):
             d = self.connected_d
             self.connected_d = None
-            d.callback(True)
+            d.callback(None)
 
     def get_servers_for_psi(self, peer_selection_index):
         # return a list of server objects (IServers)
