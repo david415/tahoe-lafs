@@ -30,6 +30,7 @@ class DropUploader(service.MultiService):
                                  "could not be represented in the filesystem encoding."
                                  % quote_output(local_dir_utf8))
 
+        self._pending = set()
         self._client = client
         self._stats_provider = client.stats_provider
         self._convergence = client.convergence
@@ -79,8 +80,10 @@ class DropUploader(service.MultiService):
         self._process_deque()
         return
 
-    def _append_to_deque(self, thunk):
+    def _append_to_deque(self, func, path, event_mask):
+        thunk = (func, path, event_mask)
         self._upload_deque.append(thunk)
+        self._pending.add(path)
         if self.is_upload_ready:
             self._process_deque()
 
@@ -96,10 +99,11 @@ class DropUploader(service.MultiService):
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
         self._stats_provider.count('drop_upload.files_queued', 1)
+        if path not in self._pending:
+            self._append_to_deque(self._process, path, events_mask)
+            self._pending.add(path)
 
-        self._append_to_deque((self._process, opaque, path, events_mask))
-
-    def _process(self, opaque, path, events_mask):
+    def _process(self, path, events_mask):
         d = defer.succeed(None)
 
         # FIXME: if this already exists as a mutable file, we replace the directory entry,
@@ -111,6 +115,7 @@ class DropUploader(service.MultiService):
                 name = name.decode(get_filesystem_encoding())
 
             u = FileName(path.path, self._convergence)
+            self._pending.remove(path)
             return self._parent.add_file(name, u)
         d.addCallback(_add_file)
 
