@@ -2,7 +2,7 @@
 import sys
 from collections import deque
 
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 from twisted.python.filepath import FilePath
 from twisted.application import service
 
@@ -30,6 +30,7 @@ class DropUploader(service.MultiService):
                                  "could not be represented in the filesystem encoding."
                                  % quote_output(local_dir_utf8))
 
+        self._timer = None
         self._pending = set()
         self._client = client
         self._stats_provider = client.stats_provider
@@ -77,23 +78,34 @@ class DropUploader(service.MultiService):
         processing the upload items...
         """
         self.is_upload_ready = True
-        self._process_deque()
+        self._turn()
 
     def _append_to_deque(self, func, path, event_mask):
         thunk = (func, path, event_mask)
         self._upload_deque.append(thunk)
         self._pending.add(path)
-        if self.is_upload_ready:
-            self._process_deque()
+        if self.is_upload_ready and not self._timer:
+            self._timer = reactor.callLater(0, self._turn)
 
-    def _process_deque(self):
-        while True:
-            try:
-                fields = self._upload_deque.pop()
-                func = fields[0]
-                func(*fields[1:])
-            except IndexError:
-                break
+    def _turn(self, upload_deque=None):
+        """
+        flush all the messages that are currently in the deque. If anything
+        gets added to the deque while we're doing this, those events will
+        be put off until the next turn.
+        """
+        self._timer = None
+
+        if upload_deque is None:
+            upload_deque, self._upload_deque = self._upload_deque, deque()
+        try:
+            fields = upload_deque.pop()
+            func = fields[0]
+            d = func(*fields[1:])
+            def finish_then_next_turn(ign):
+                return self._turn(upload_deque)
+            d.addBoth(finish_then_next_turn)
+        except IndexError:
+            return
 
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
