@@ -84,8 +84,9 @@ class DropUploader(service.MultiService):
         thunk = (func, path, event_mask)
         self._upload_deque.append(thunk)
         self._pending.add(path)
-        if self.is_upload_ready and not self._timer:
+        if self.is_upload_ready and self._timer is None:
             self._timer = reactor.callLater(0, self._turn)
+        print "end of _append_to_deque"
 
     def _turn(self, upload_deque=None):
         """
@@ -108,9 +109,10 @@ class DropUploader(service.MultiService):
             return
 
     def _notify(self, opaque, path, events_mask):
+        print "_notify!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
-        self._stats_provider.count('drop_upload.files_queued', 1)
         if path not in self._pending:
+            self._stats_provider.count('drop_upload.files_queued', 1)
             self._append_to_deque(self._process, path, events_mask)
 
     def _process(self, path, events_mask):

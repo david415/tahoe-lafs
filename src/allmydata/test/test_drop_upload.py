@@ -3,7 +3,7 @@ import os, sys
 
 from twisted.trial import unittest
 from twisted.python import filepath, runtime
-from twisted.internet import defer
+from twisted.internet import defer, reactor
 
 from allmydata.interfaces import IDirectoryNode, NoSuchChildError
 
@@ -31,10 +31,8 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         self.set_up_grid()
         self.local_dir = os.path.join(self.basedir, test_name)
         self.mkdir_nonascii(self.local_dir)
-
         self.client = self.g.clients[0]
         self.stats_provider = self.client.stats_provider
-
         d = self.client.create_dirnode()
         def _made_upload_dir(n):
             self.failUnless(IDirectoryNode.providedBy(n))
@@ -43,9 +41,13 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
             self.uploader = DropUploader(self.client, self.upload_dircap, self.local_dir.encode('utf-8'),
                                          inotify=self.inotify)
             self.uploader.setServiceParent(self.client)
-            self.uploader.startService()
+            d = self.uploader.startService()
+
+            # add artificial delay?
+            #reactor.callLater(2, self.uploader.upload_ready)
             self.uploader.upload_ready()
-            return None
+
+            return d
         d.addCallback(_made_upload_dir)
         return d
 
@@ -57,17 +59,42 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         d.addCallback(lambda ign: res)
         return d
 
+    def _enqueue_file(self, name_u, data):
+        path_u = os.path.join(self.local_dir, name_u)
+        if sys.platform == "win32":
+            path = filepath.FilePath(path_u)
+        else:
+            path = filepath.FilePath(path_u.encode(get_filesystem_encoding()))
+        f = open(path.path, "wb")
+        try:
+            f.write(data)
+        finally:
+            f.close()
+        self.notify_close_write(path)
+        print "_enqueue_file wrote a file."
+
     def _test_dedup_uploads(self):
-        d = self._setup_test(u"dedup_uploads")
+        d = self._setup_test("dedup_uploads")
 
-        # the actual test code here
-        # should cause exception:
-        d.addCallback(lambda ign: self._test_file(u"short", "test"))
-        d.addCallback(lambda ign: self._test_file(u"short", "different"))
+        def upload_some_stuff(res):
+            d = defer.Deferred()
+            self._enqueue_file(u"short", "1")
+            self.uploader.set_uploaded_callback(d.callback)
 
+            def enqueue_more(ignore):
+                self.failUnlessReallyEqual(self._get_count('drop_upload.files_queued'), 0)
+                self._enqueue_file(u"short", "2")
+                self._enqueue_file(u"short", "3")
+                print "pending %d" % (len(self.uploader._pending),)
+                self.failUnlessReallyEqual(self._get_count('drop_upload.files_queued'), 1)
+                return None
+
+            d.addCallback(enqueue_more)
+            return d
+
+        d.addCallback(upload_some_stuff)
         d.addBoth(self._cleanup_test)
         return d
-
 
     def _test(self):
         self.uploader = None
@@ -206,8 +233,12 @@ class MockTest(DropUploadTestMixin, unittest.TestCase):
         self.basedir = "drop_upload.MockTest.test_drop_upload"
         return self._test()
 
+    def test_dedup_uploads(self):
+        self.inotify = fake_inotify
+        self.basedir = "drop_upload.MockTest.test_dedup_uploads"
+        return self._test_dedup_uploads()
+
     def notify_close_write(self, path):
-        print "mock notify_close_write"
         self.uploader._notifier.event(path, self.inotify.IN_CLOSE_WRITE)
 
 
