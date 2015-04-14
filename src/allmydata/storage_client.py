@@ -126,7 +126,7 @@ class StorageFarmBroker:
             len(self.get_connected_servers()) >= self.connected_threshold):
             d = self.connected_d
             self.connected_d = None
-            d.callback(self.servers_connected)
+            d.callback(True)
 
     def get_servers_for_psi(self, peer_selection_index):
         # return a list of server objects (IServers)
