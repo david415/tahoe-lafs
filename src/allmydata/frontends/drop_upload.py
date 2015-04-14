@@ -79,8 +79,11 @@ class DropUploader(service.MultiService):
         self._process_deque()
         return
 
-    def _append_to_deque(self, thunk):
-        self._upload_deque.append(thunk)
+    def _append_to_deque(self, item):
+        """_append_to_deque the item to the deque and
+        then process the deque if it's ready.
+        """
+        self._upload_deque.append(item)
         if self.is_upload_ready:
             self._process_deque()
 
