@@ -101,8 +101,8 @@ class DropUploader(service.MultiService):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
         self._stats_provider.count('drop_upload.files_queued', 1)
         if path not in self._pending:
-            self._append_to_deque(self._process, path, events_mask)
             self._pending.add(path)
+            self._append_to_deque((self._process, path, events_mask))
 
     def _process(self, path, events_mask):
         d = defer.succeed(None)

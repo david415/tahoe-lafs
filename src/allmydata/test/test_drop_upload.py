@@ -26,6 +26,49 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
     def _get_count(self, name):
         return self.stats_provider.get_stats()["counters"].get(name, 0)
 
+    def _setup_test(self, test_name):
+        self.uploader = None
+        self.set_up_grid()
+        self.local_dir = os.path.join(self.basedir, test_name)
+        self.mkdir_nonascii(self.local_dir)
+
+        self.client = self.g.clients[0]
+        self.stats_provider = self.client.stats_provider
+
+        d = self.client.create_dirnode()
+        def _made_upload_dir(n):
+            self.failUnless(IDirectoryNode.providedBy(n))
+            self.upload_dirnode = n
+            self.upload_dircap = n.get_uri()
+            self.uploader = DropUploader(self.client, self.upload_dircap, self.local_dir.encode('utf-8'),
+                                         inotify=self.inotify)
+            self.uploader.setServiceParent(self.client)
+            self.uploader.startService()
+            self.uploader.upload_ready()
+            return None
+        d.addCallback(_made_upload_dir)
+        return d
+
+        # Prevent unclean reactor errors.
+    def _cleanup_test(self, res):
+        d = defer.succeed(None)
+        if self.uploader is not None:
+            d.addCallback(lambda ign: self.uploader.finish(for_tests=True))
+        d.addCallback(lambda ign: res)
+        return d
+
+    def _test_dedup_uploads(self):
+        d = self._setup_test(u"dedup_uploads")
+
+        # the actual test code here
+        # should cause exception:
+        d.addCallback(lambda ign: self._test_file(u"short", "test"))
+        d.addCallback(lambda ign: self._test_file(u"short", "different"))
+
+        d.addBoth(self._cleanup_test)
+        return d
+
+
     def _test(self):
         self.uploader = None
         self.set_up_grid()
@@ -53,7 +96,7 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
 
         # XXX FIX ME
         # Write to the same file again with different data.
-        #d.addCallback(lambda ign: self._test_file(u"short", "different"))
+        d.addCallback(lambda ign: self._test_file(u"short", "different"))
 
         # Test that temporary files are not uploaded.
         d.addCallback(lambda ign: self._test_file(u"tempfile", "test", temporary=True))
@@ -180,6 +223,13 @@ class RealTest(DropUploadTestMixin, unittest.TestCase):
         self.inotify = None  # use the appropriate inotify for the platform
         self.basedir = "drop_upload.RealTest.test_drop_upload"
         return self._test()
+
+    def test_dedup_uploads(self):
+        if not runtime.platform.supportsINotify():
+            raise unittest.SkipTest("Drop-upload support can only be tested for-real on an OS that supports inotify or equivalent.")
+        self.inotify = None
+        self.basedir = "drop_upload.RealTest.test_dedup_uploads"
+        return self._test_dedup_uploads()
 
     def notify_close_write(self, path):
         # Writing to the file causes the notification.
