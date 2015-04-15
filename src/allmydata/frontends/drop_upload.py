@@ -1,5 +1,6 @@
 
 import sys
+import os.path
 
 from twisted.internet import defer
 from twisted.python.filepath import FilePath
@@ -80,14 +81,27 @@ class DropUploader(service.MultiService):
         # FIXME: if this already exists as a mutable file, we replace the directory entry,
         # but we should probably modify the file (as the SFTP frontend does).
         def _add_file(ign):
-            name = path.basename()
-            # on Windows the name is already Unicode
-            if not isinstance(name, unicode):
-                name = name.decode(get_filesystem_encoding())
-
             u = FileName(path.path, self._convergence)
             return self._parent.add_file(name, u)
-        d.addCallback(_add_file)
+
+        def _add_dir(ign):
+            # XXX
+            return self._parent.create_subdirectory(name)
+
+        if os.path.islink(path.path):
+            self._log("operator ERROR: symlink not being processed.")
+            return d
+
+        name = path.basename()
+        # on Windows the name is already Unicode
+        if not isinstance(name, unicode):
+            name = name.decode(get_filesystem_encoding())
+
+        if os.path.isdir(path.path):
+            d.addCallback(_add_dir)
+        else if os.path.isfile(path.path):
+            d.addCallback(_add_file)
+            d.addCallbacks(_succeeded, _failed)
 
         def _succeeded(ign):
             self._stats_provider.count('drop_upload.files_queued', -1)
@@ -103,7 +117,6 @@ class DropUploader(service.MultiService):
                           "(this is normal for temporary files): %r" % (path.path, f))
                 self._stats_provider.count('drop_upload.files_disappeared', 1)
                 return None
-        d.addCallbacks(_succeeded, _failed)
         d.addBoth(self._uploaded_callback)
         return d
 
