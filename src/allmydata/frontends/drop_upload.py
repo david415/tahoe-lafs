@@ -99,7 +99,8 @@ class DropUploader(service.MultiService):
 
         if os.path.isdir(path.path):
             d.addCallback(_add_dir)
-        else if os.path.isfile(path.path):
+
+        if os.path.isfile(path.path):
             d.addCallback(_add_file)
             d.addCallbacks(_succeeded, _failed)
 
