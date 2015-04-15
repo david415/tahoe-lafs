@@ -75,6 +75,8 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         return d
 
     def _test_file(self, name_u, data, temporary=False):
+        print "_test_file: %s" % (name_u,)
+
         previously_uploaded = self._get_count('drop_upload.files_uploaded')
         previously_disappeared = self._get_count('drop_upload.files_disappeared')
 

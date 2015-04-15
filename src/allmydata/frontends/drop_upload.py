@@ -89,6 +89,7 @@ class DropUploader(service.MultiService):
             return self._parent.create_subdirectory(name)
 
         if os.path.islink(path.path):
+            print "islink"
             self._log("operator ERROR: symlink not being processed.")
             return d
 
@@ -96,13 +97,6 @@ class DropUploader(service.MultiService):
         # on Windows the name is already Unicode
         if not isinstance(name, unicode):
             name = name.decode(get_filesystem_encoding())
-
-        if os.path.isdir(path.path):
-            d.addCallback(_add_dir)
-
-        if os.path.isfile(path.path):
-            d.addCallback(_add_file)
-            d.addCallbacks(_succeeded, _failed)
 
         def _succeeded(ign):
             self._stats_provider.count('drop_upload.files_queued', -1)
@@ -118,6 +112,15 @@ class DropUploader(service.MultiService):
                           "(this is normal for temporary files): %r" % (path.path, f))
                 self._stats_provider.count('drop_upload.files_disappeared', 1)
                 return None
+
+        if os.path.isdir(path.path):
+            print "isdir"
+            d.addCallback(_add_dir)
+        elif os.path.isfile(path.path):
+            print "isfile"
+            d.addCallback(_add_file)
+            d.addCallbacks(_succeeded, _failed)
+
         d.addBoth(self._uploaded_callback)
         return d
 
