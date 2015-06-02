@@ -18,7 +18,7 @@ from allmydata.scripts import backupdb
 class DropUploader(service.MultiService):
     name = 'drop-upload'
 
-    def __init__(self, client, upload_dircap, local_dir, dbfile, inotify=None,
+    def __init__(self, client, upload_dircap, parent_dircap, local_dir, dbfile, inotify=None,
                  pending_delay=1.0):
         precondition_abspath(local_dir)
 
