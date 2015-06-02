@@ -298,10 +298,10 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
         _check("helper.furl = pb://blah\n", "pb://blah")
 
     @mock.patch('allmydata.util.log.msg')
-    @mock.patch('allmydata.frontends.drop_upload.DropUploader')
-    def test_create_drop_uploader(self, mock_drop_uploader, mock_log_msg):
-        class MockDropUploader(service.MultiService):
-            name = 'drop-upload'
+    @mock.patch('allmydata.frontends.magic_folder.MagicFolder')
+    def test_create_magic_folder(self, mock_magic_folder, mock_log_msg):
+        class MockMagicFolder(service.MultiService):
+            name = 'magic-folder'
 
             def __init__(self, client, upload_dircap, local_dir, dbfile, inotify=None,
                          pending_delay=1.0):
@@ -312,7 +312,7 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
                 self.dbfile = dbfile
                 self.inotify = inotify
 
-        mock_drop_uploader.side_effect = MockDropUploader
+        mock_magic_folder.side_effect = MockMagicFolder
 
         upload_dircap = "URI:DIR2:blah"
         local_dir_u = self.unicode_or_fallback(u"loc\u0101l_dir", u"local_dir")
@@ -320,7 +320,7 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
         config = (BASECONFIG +
                   "[storage]\n" +
                   "enabled = false\n" +
-                  "[drop_upload]\n" +
+                  "[magic_folder]\n" +
                   "enabled = true\n")
 
         basedir1 = "test_client.Basic.test_create_drop_uploader1"
@@ -330,7 +330,7 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
         self.failUnlessRaises(MissingConfigEntry, client.Client, basedir1)
 
         fileutil.write(os.path.join(basedir1, "tahoe.cfg"), config)
-        fileutil.write(os.path.join(basedir1, "private", "drop_upload_dircap"), "URI:DIR2:blah")
+        fileutil.write(os.path.join(basedir1, "private", "magic_folder_dircap"), "URI:DIR2:blah")
         self.failUnlessRaises(MissingConfigEntry, client.Client, basedir1)
 
         fileutil.write(os.path.join(basedir1, "tahoe.cfg"),
@@ -340,8 +340,8 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
         fileutil.write(os.path.join(basedir1, "tahoe.cfg"),
                        config + "local.directory = " + local_dir_utf8 + "\n")
         c1 = client.Client(basedir1)
-        uploader = c1.getServiceNamed('drop-upload')
-        self.failUnless(isinstance(uploader, MockDropUploader), uploader)
+        uploader = c1.getServiceNamed('magic-folder')
+        self.failUnless(isinstance(uploader, MockMagicFolder), uploader)
         self.failUnlessReallyEqual(uploader.client, c1)
         self.failUnlessReallyEqual(uploader.upload_dircap, upload_dircap)
         self.failUnlessReallyEqual(os.path.basename(uploader.local_dir), local_dir_u)
@@ -350,19 +350,19 @@ class Basic(testutil.ReallyEqualMixin, testutil.NonASCIIPathMixin, unittest.Test
 
         class Boom(Exception):
             pass
-        mock_drop_uploader.side_effect = Boom()
+        mock_magic_folder.side_effect = Boom()
 
         basedir2 = "test_client.Basic.test_create_drop_uploader2"
         os.mkdir(basedir2)
         os.mkdir(os.path.join(basedir2, "private"))
         fileutil.write(os.path.join(basedir2, "tahoe.cfg"),
                        BASECONFIG +
-                       "[drop_upload]\n" +
+                       "[magic_folder]\n" +
                        "enabled = true\n" +
                        "local.directory = " + local_dir_utf8 + "\n")
-        fileutil.write(os.path.join(basedir2, "private", "drop_upload_dircap"), "URI:DIR2:blah")
+        fileutil.write(os.path.join(basedir2, "private", "magic_folder_dircap"), "URI:DIR2:blah")
         c2 = client.Client(basedir2)
-        self.failUnlessRaises(KeyError, c2.getServiceNamed, 'drop-upload')
+        self.failUnlessRaises(KeyError, c2.getServiceNamed, 'magic-folder')
         self.failUnless([True for arg in mock_log_msg.call_args_list if "Boom" in repr(arg)],
                         mock_log_msg.call_args_list)
 

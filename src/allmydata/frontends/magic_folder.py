@@ -15,8 +15,8 @@ from allmydata.immutable.upload import FileName
 from allmydata.scripts import backupdb
 
 
-class DropUploader(service.MultiService):
-    name = 'drop-upload'
+class MagicFolder(service.MultiService):
+    name = 'magic-folder'
 
     def __init__(self, client, upload_dircap, local_dir, dbfile, inotify=None,
                  pending_delay=1.0):

@@ -14,12 +14,12 @@ from allmydata.test.no_network import GridTestMixin
 from allmydata.test.common_util import ReallyEqualMixin, NonASCIIPathMixin
 from allmydata.test.common import ShouldFailMixin
 
-from allmydata.frontends.drop_upload import DropUploader
+from allmydata.frontends.magic_folder import MagicFolder
 from allmydata.scripts import backupdb
 from allmydata.util.fileutil import abspath_expanduser_unicode
 
 
-class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonASCIIPathMixin):
+class MagicFolderTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonASCIIPathMixin):
     """
     These tests will be run both with a mock notifier, and (on platforms that support it)
     with the real INotify.
@@ -53,7 +53,7 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
 
     def _create_uploader(self, ign):
         dbfile = abspath_expanduser_unicode(u"magicfolderdb.sqlite", base=self.basedir)
-        self.uploader = DropUploader(self.client, self.upload_dircap, self.local_dir,
+        self.uploader = MagicFolder(self.client, self.upload_dircap, self.local_dir,
                                      dbfile, inotify=self.inotify, pending_delay=0.2)
         self.uploader.setServiceParent(self.client)
         self.uploader.upload_ready()
@@ -302,11 +302,11 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         return d
 
 
-class MockTest(DropUploadTestMixin, unittest.TestCase):
+class MockTest(MagicFolderTestMixin, unittest.TestCase):
     """This can run on any platform, and even if twisted.internet.inotify can't be imported."""
 
     def setUp(self):
-        DropUploadTestMixin.setUp(self)
+        MagicFolderTestMixin.setUp(self)
         self.inotify = fake_inotify
 
     def notify_close_write(self, path):
@@ -330,24 +330,24 @@ class MockTest(DropUploadTestMixin, unittest.TestCase):
             readonly_dircap = n.get_readonly_uri()
 
             self.shouldFail(AssertionError, 'nonexistent local.directory', 'there is no directory',
-                            DropUploader, client, upload_dircap, doesnotexist, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, client, upload_dircap, doesnotexist, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'non-directory local.directory', 'is not a directory',
-                            DropUploader, client, upload_dircap, not_a_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, client, upload_dircap, not_a_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'bad upload.dircap', 'does not refer to a directory',
-                            DropUploader, client, 'bad', errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, client, 'bad', errors_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'non-directory upload.dircap', 'does not refer to a directory',
-                            DropUploader, client, 'URI:LIT:foo', errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, client, 'URI:LIT:foo', errors_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'readonly upload.dircap', 'is not a writecap to a directory',
-                            DropUploader, client, readonly_dircap, errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, client, readonly_dircap, errors_dir, magicfolderdb, inotify=fake_inotify)
         d.addCallback(_check_errors)
         return d
 
 
-class RealTest(DropUploadTestMixin, unittest.TestCase):
+class RealTest(MagicFolderTestMixin, unittest.TestCase):
     """This is skipped unless both Twisted and the platform support inotify."""
 
     def setUp(self):
-        DropUploadTestMixin.setUp(self)
+        MagicFolderTestMixin.setUp(self)
         self.inotify = None
 
     def notify_close_write(self, path):
