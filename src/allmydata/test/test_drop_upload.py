@@ -58,7 +58,6 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
                                      dbfile, inotify=self.inotify, pending_delay=0.2)
         self.uploader.setServiceParent(self.client)
         self.uploader.upload_ready()
-        self.failUnlessEqual(self.uploader._db.VERSION, 2)
 
     # Prevent unclean reactor errors.
     def _cleanup(self, res):
@@ -180,26 +179,23 @@ class DropUploadTestMixin(GridTestMixin, ShouldFailMixin, ReallyEqualMixin, NonA
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.files_uploaded'), 2))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.objects_queued'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.directories_created'), 2))
-
+        """
         # Files that are moved out of the upload directory should no longer be watched.
         def _move_dir_away(ign):
             os.rename(new_empty_tree_dir, empty_tree_dir)
             self.notify(to_filepath(new_empty_tree_dir), self.inotify.IN_MOVED_FROM)
-
         d.addCallback(_move_dir_away)
         def create_file(val):
-            d2 = defer.Deferred()
-            self.uploader.set_uploaded_callback(d2.callback, ignore_count=0)
             test_file = abspath_expanduser_unicode(u"what", base=empty_tree_dir)
             fileutil.write(test_file, "meow")
-            return d2
+            return
         d.addCallback(create_file)
         d.addCallback(lambda ign: time.sleep(1))
-        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.objects_uploaded'), 5))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.objects_uploaded'), 4))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.files_uploaded'), 2))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.objects_queued'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('drop_upload.directories_created'), 2))
-        d.addBoth(self._cleanup)
+        """
         d.addBoth(self._cleanup)
         return d
 
