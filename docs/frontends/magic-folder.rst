@@ -1,8 +1,8 @@
 ﻿.. -*- coding: utf-8-with-signature -*-
 
-===============================
-Tahoe-LAFS Drop-Upload Frontend
-===============================
+================================
+Tahoe-LAFS Magic-Folder Frontend
+================================
 
 1.  `Introduction`_
 2.  `Configuration`_
@@ -12,7 +12,7 @@ Tahoe-LAFS Drop-Upload Frontend
 Introduction
 ============
 
-The drop-upload frontend allows an upload to a Tahoe-LAFS grid to be triggered
+The magic-folder frontend allows an upload to a Tahoe-LAFS grid to be triggered
 automatically whenever a file is created or changed in a specific local
 directory. It currently works on Linux and Windows.
 
@@ -30,18 +30,18 @@ suggestions to improve its usability, functionality, and reliability.
 Configuration
 =============
 
-The drop-upload frontend runs as part of a gateway node. To set it up, you
+The magic-folder frontend runs as part of a gateway node. To set it up, you
 need to choose the local directory to monitor for file changes, and a mutable
 directory on the grid to which files will be uploaded.
 
-These settings are configured in the ``[drop_upload]`` section of the
+These settings are configured in the ``[magic_folder]`` section of the
 gateway's ``tahoe.cfg`` file.
 
-``[drop_upload]``
+``[magic_folder]``
 
 ``enabled = (boolean, optional)``
 
-    If this is ``True``, drop-upload will be enabled. The default value is
+    If this is ``True``, magic-folder will be enabled. The default value is
     ``False``.
 
 ``local.directory = (UTF-8 path)``
@@ -51,7 +51,7 @@ gateway's ``tahoe.cfg`` file.
     in UTF-8 regardless of the system's filesystem encoding. Relative paths
     will be interpreted starting from the node's base directory.
 
-In addition, the file  ``private/drop_upload_dircap`` must contain a
+In addition, the file  ``private/magic_folder_dircap`` must contain a
 writecap pointing to an existing mutable directory to be used as the target
 of uploads. It will start with ``URI:DIR2:``, and cannot include an alias
 or path.
@@ -91,10 +91,10 @@ The only way to determine whether uploads have failed is to look at the
 'Operational Statistics' page linked from the Welcome page. This only shows
 a count of failures, not the names of files. Uploads are never retried.
 
-The drop-upload frontend performs its uploads sequentially (i.e. it waits
+The magic-folder frontend performs its uploads sequentially (i.e. it waits
 until each upload is finished before starting the next), even when there
 would be enough memory and bandwidth to efficiently perform them in parallel.
-A drop-upload can occur in parallel with an upload by a different frontend,
+A magic-folder can occur in parallel with an upload by a different frontend,
 though. (`#1459`_)
 
 On Linux, if there are a large number of near-simultaneous file creation or
@@ -126,7 +126,7 @@ up-to-date. (`#1440`_)
 Files deleted from the local directory will not be unlinked from the upload
 directory. (`#1710`_)
 
-The ``private/drop_upload_dircap`` file cannot use an alias or path to
+The ``private/magic_folder_dircap`` file cannot use an alias or path to
 specify the upload directory. (`#1711`_)
 
 Files are always uploaded as immutable. If there is an existing mutable file
@@ -146,7 +146,7 @@ The expected encoding is that printed by
 On Windows, local directories with non-ASCII names are not currently working.
 (`#2219`_)
 
-On Windows, when a node has drop-upload enabled, it is unresponsive to Ctrl-C
+On Windows, when a node has magic-folder enabled, it is unresponsive to Ctrl-C
 (it can only be killed using Task Manager or similar). (`#2218`_)
 
 .. _`#1105`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/1105
