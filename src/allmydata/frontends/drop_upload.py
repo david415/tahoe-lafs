@@ -90,10 +90,7 @@ class DropUploader(service.MultiService):
         # possibly-incomplete file before the application has closed it. There should always
         # be an IN_CLOSE_WRITE after an IN_CREATE (I think).
         # TODO: what about IN_MOVE_SELF or IN_UNMOUNT?
-        #self.mask = inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_ONLYDIR
-        #self.mask = inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_MOVED_FROM | inotify.IN_ONLYDIR | IN_EXCL_UNLINK
         self.mask = inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_ONLYDIR | IN_EXCL_UNLINK | inotify.IN_DELETE
-        #self.mask = inotify.IN_CLOSE_WRITE | inotify.IN_MOVED_TO | inotify.IN_ONLYDIR | IN_EXCL_UNLINK
         self._notifier.watch(self._local_path, mask=self.mask, callbacks=[self._notify],
                              recursive=True)
 
@@ -205,10 +202,7 @@ class DropUploader(service.MultiService):
             return self._parent.add_file(name, u)
 
         def _add_dir(ignore, name):
-            # XXX
-            #self._notifier.watch(to_filepath(path), mask=self.mask, callbacks=[self._notify], recursive=True)
-            print name
-            print self._local_dir
+            self._notifier.watch(to_filepath(path), mask=self.mask, callbacks=[self._notify], recursive=True)
             d2 = self._parent.create_subdirectory(name, overwrite=False)
             def _err(f):
                 f.trap(ExistingChildError)
