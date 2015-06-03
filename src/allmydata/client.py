@@ -493,11 +493,9 @@ class Client(node.Node, pollmixin.PollMixin):
             s.setServiceParent(self)
 
     def init_magic_folder(self):
-        if self.get_config("magic_folder", "enabled", False, boolean=True):
-            if self.get_config("magic_folder", "upload.dircap", None):
-                raise OldConfigOptionError("The [magic_folder]upload.dircap option is no longer supported; please "
-                                           "put the cap in a 'private/drop_upload_dircap' file, and delete this option.")
-
+        if self.get_config("drop_upload", "enabled", False, boolean=True):
+            raise OldConfigOptionError("The [drop_upload] section must be renamed to [magic_folder].\n"
+                                       "See docs/frontends/magic-folder.rst for more information.")
             upload_dircap = self.get_or_create_private_config("magic_folder_dircap")
             local_dir_config = self.get_config("magic_folder", "local.directory").decode("utf-8")
             local_dir = abspath_expanduser_unicode(local_dir_config, base=self.basedir)
