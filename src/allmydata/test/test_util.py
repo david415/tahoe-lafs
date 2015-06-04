@@ -12,7 +12,7 @@ from pycryptopp.hash.sha256 import SHA256 as _hash
 from allmydata.util import base32, idlib, humanreadable, mathutil, hashutil
 from allmydata.util import assertutil, fileutil, deferredutil, abbreviate
 from allmydata.util import limiter, time_format, pollmixin, cachedir
-from allmydata.util import statistics, dictutil, pipeline, magicpath
+from allmydata.util import statistics, dictutil, pipeline
 from allmydata.util import log as tahoe_log
 from allmydata.util.spans import Spans, overlap, DataSpans
 from allmydata.test.common_util import ReallyEqualMixin
@@ -2247,21 +2247,3 @@ class StringSpans(unittest.TestCase):
                 length = max(1, int(what[5:6], 16))
                 d1 = s1.get(start, length); d2 = s2.get(start, length)
                 self.failUnlessEqual(d1, d2, "%d+%d" % (start, length))
-
-
-class MagicPath(unittest.TestCase):
-
-    tests = { "Documents/work/critical-project/qed.txt": "Documents@work@critical-project@qed.txt",
-              "Documents/emails/bunnyfufu@hopingforest.net": "Documents@emails@bunnyfufu@@hopingforest.net",
-    }
-
-    def test_path2magic(self):
-        for test, expected in self.tests.items():
-            self.failUnlessEqual(magicpath.path2magic(test), expected)
-
-    def test_magic2path(self):
-        for test, expected in self.tests.items():
-            test2 = test
-            test = expected
-            expected = test2
-            self.failUnlessEqual(magicpath.magic2path(test), expected)

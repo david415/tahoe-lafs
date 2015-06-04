@@ -1,13 +1,9 @@
-# from the Python Standard Library
-import string
 
-def magic2path(path):
-    path = string.replace(path, "@@", "|")
-    path = string.replace(path, "@", "/")
-    path = string.replace(path, "|", "@")
-    return path
+import re
+
 
 def path2magic(path):
-    path = string.replace(path, "@", "@@")
-    path = string.replace(path, "/", "@")
-    return path
+    return re.sub(ur'[/@]',  lambda m: {u'/': u'@_', u'@': u'@@'}[m.group(0)], path)
+
+def magic2path(path):
+    return re.sub(ur'@[_@]', lambda m: {u'@_': u'/', u'@@': u'@'}[m.group(0)], path)
