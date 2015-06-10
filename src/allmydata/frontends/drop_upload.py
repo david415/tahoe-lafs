@@ -24,6 +24,7 @@ class DropUploader(service.MultiService):
         precondition_abspath(local_dir)
 
         service.MultiService.__init__(self)
+        self._parent_dircap = parent_dircap
         self._local_dir = abspath_expanduser_unicode(local_dir)
         self._upload_lazy_tail = defer.succeed(None)
         self._pending = set()
@@ -74,13 +75,18 @@ class DropUploader(service.MultiService):
         self._notifier.watch(self._local_path, mask=self.mask, callbacks=[self._notify],
                              recursive=True)
 
-    def _check_db_file(self, childpath):
-        # returns True if the file must be uploaded.
+    def _db_file_is_uploaded(self, childpath):
+        """_db_file_is_uploaded returns true if the file was previously uploaded
+        """
         assert self._db != None
         r = self._db.check_file(childpath)
         filecap = r.was_uploaded()
         if filecap is False:
             return True
+
+    def _scan_parent(self):
+        # XXX use self._parent_dircap
+        pass
 
     def _scan(self, localpath):
         if not os.path.isdir(localpath):
@@ -110,8 +116,8 @@ class DropUploader(service.MultiService):
                 # recurse on the child directory
                 self._scan(childpath)
             elif isfile:
-                must_upload = self._check_db_file(childpath)
-                if must_upload:
+                is_uploaded = self._db_file_is_uploaded(childpath)
+                if not is_uploaded:
                     self._append_to_deque(childpath)
             else:
                 self.warn("WARNING: cannot backup special file %s" % quote_local_unicode_path(childpath))
@@ -201,13 +207,26 @@ class DropUploader(service.MultiService):
             self._pending.remove(path)
             relpath = os.path.relpath(path, self._local_dir)
             name = magicpath.path2magic(relpath)
-            # XXX
-            #name = os.path.basename(path)
-
             if not os.path.exists(path):
                 self._log("uploader: not uploading non-existent file.")
                 self._stats_provider.count('drop_upload.objects_disappeared', 1)
-                return NoSuchChildError("not uploading non-existent file")
+                # XXX todo: check if file exists in magic folder db
+                # ...
+                if not self._db_file_is_uploaded(path):
+                    return NoSuchChildError("not uploading non-existent file")
+                else:
+                    # XXX ...
+                    u = Data("", self._convergence)
+                    d2 = self._parent.add_file(name, u, overwrite=True)
+                    def get_metadata(d):
+                        return self._parent.get_metadata_for(name)
+                    def set_deleted(metadata):
+                        metadata['version'] += 1
+                        metadata['deleted'] = True
+                        return self._parent.set_metadata_for(name, metadata)
+                    d2.addCallback(get_metadata)
+                    d2.addCallback(set_deleted)
+                    return NoSuchChildError("not uploading non-existent file")
             elif os.path.islink(path):
                 self._log("operator ERROR: symlink not being processed.")
                 return Failure()
@@ -279,4 +298,5 @@ class DropUploader(service.MultiService):
 
     def _log(self, msg):
         self._client.log(msg)
+        print "_log: %s" % (msg,)
         #open("events", "ab+").write(msg)
