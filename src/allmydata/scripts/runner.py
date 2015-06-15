@@ -5,7 +5,7 @@ from cStringIO import StringIO
 from twisted.python import usage
 
 from allmydata.scripts.common import get_default_nodedir
-from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer, admin
+from allmydata.scripts import debug, create_node, startstop_node, cli, keygen, stats_gatherer, admin, magic_folder_cli
 from allmydata.util.encodingutil import quote_output, quote_local_unicode_path, get_io_encoding
 
 def GROUP(s):
@@ -45,7 +45,8 @@ class Options(usage.Options):
                     +   debug.subCommands
                     + GROUP("Using the filesystem")
                     +   cli.subCommands
-                    )
+                    + GROUP("Magic Folder")
+                    +   magic_folder_cli.subCommands )
 
     optFlags = [
         ["quiet", "q", "Operate silently."],
@@ -145,6 +146,8 @@ def runner(argv,
         rc = cli.dispatch[command](so)
     elif command in ac_dispatch:
         rc = ac_dispatch[command](so, stdout, stderr)
+    elif command in magic_folder_cli.dispatch:
+        rc = magic_folder_cli.dispatch[command](so)
     else:
         raise usage.UsageError()
 
