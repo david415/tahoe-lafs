@@ -2,23 +2,29 @@
 # do not import any allmydata modules at this level. Do that from inside
 # individual functions instead.
 from twisted.python import usage, failure
-from allmydata.scripts.common import BaseOptions
+from allmydata.scripts.cli import FilesystemOptions, BaseOptions, CreateAliasOptions
+from allmydata.util.encodingutil import argv_to_unicode
 
-class CreateOptions(BaseOptions):
-    def getSynopsis(self):
-        return "Usage: tahoe [global-options] magic-folder create MAGIC"
-
-    optFlags = []
+class CreateMagicFolderOptions(BaseOptions):
+    synopsis = "[options] ALIAS[:]"
+    description = """Create a new directory and add an alias for it."""
+    alias = ''
     description = """
 Create a new Magic-Folder.
 
  tahoe magic-folder create myShareGroup1
 """
+
+    def getSynopsis(self):
+        return "Usage: tahoe [global-options] magic-folder create MAGIC"
+
     def parseArgs(self, *option_args):
         if not option_args:
             raise usage.UsageError("must specify at least a Magic-Folder name")
         else:
-            pass # XXX more parsing here...
+            self.alias = argv_to_unicode(option_args[0])
+            if self.alias.endswith(u':'):
+                self.alias = self.alias[:-1]
 
 
 class InviteOptions(BaseOptions):
@@ -28,7 +34,7 @@ class JoinOptions(BaseOptions):
 
 class MagicFolderCommand(BaseOptions):
     subCommands = [
-        ["create", None, CreateOptions, "Create a Magic-Folder."],
+        ["create", None, CreateMagicFolderOptions, "Create a Magic-Folder."],
         ["invite", None, InviteOptions, "Invite someone to a Magic-Folder."],
         ["join", None, JoinOptions, "Join a Magic-Folder."],
     ]
@@ -48,7 +54,9 @@ subcommand.
         return t
 
 def create(options):
-    pass
+    from allmydata.scripts import tahoe_add_alias
+    rc = tahoe_add_alias.create_alias(options, alias_file="magic-folder-aliases")
+    return rc
 
 def invite(options):
     pass

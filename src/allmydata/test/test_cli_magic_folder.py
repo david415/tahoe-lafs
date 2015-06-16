@@ -16,11 +16,10 @@ class CreateMagicFolder(GridTestMixin, CLITestMixin, unittest.TestCase):
         aliasfile = os.path.join(self.get_clientdir(), "private", "magic-folder-aliases")
 
         d = self.do_cli("magic-folder", "create", "my_magic_folder")
-
         def _done((rc,stdout,stderr)):
             self.failUnless("Alias 'my_magic_folder' created" in stdout)
             self.failIf(stderr)
-            aliases = get_aliases(self.get_clientdir(), aliases_file="magic_folder_aliases")
+            aliases = get_aliases(self.get_clientdir(), aliases_file="magic-folder-aliases")
             self.failUnless("my_magic_folder" in aliases)
             self.failUnless(aliases["my_magic_folder"].startswith("URI:DIR2:"))
         d.addCallback(_done)

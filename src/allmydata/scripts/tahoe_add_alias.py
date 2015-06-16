@@ -66,7 +66,7 @@ def create_alias(options, alias_file="aliases"):
         print >>stderr, "Alias names cannot contain spaces."
         return 1
 
-    old_aliases = get_aliases(nodedir)
+    old_aliases = get_aliases(nodedir, alias_file=alias_file)
     if alias in old_aliases:
         print >>stderr, "Alias %s already exists!" % quote_output(alias)
         return 1
