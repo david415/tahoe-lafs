@@ -99,9 +99,9 @@ class NoDefaultBasedirOptions(BasedirOptions):
 DEFAULT_ALIAS = u"tahoe"
 
 
-def get_aliases(nodedir):
+def get_aliases(nodedir, aliases_file="aliases"):
     aliases = {}
-    aliasfile = os.path.join(nodedir, "private", "aliases")
+    aliasfile = os.path.join(nodedir, "private", aliases_file)
     rootfile = os.path.join(nodedir, "private", "root_dir.cap")
     try:
         f = open(rootfile, "r")

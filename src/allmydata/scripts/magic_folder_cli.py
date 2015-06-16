@@ -18,7 +18,8 @@ Create a new Magic-Folder.
         if not option_args:
             raise usage.UsageError("must specify at least a Magic-Folder name")
         else:
-            pass # XXX do stuff...
+            pass # XXX more parsing here...
+
 
 class InviteOptions(BaseOptions):
     pass

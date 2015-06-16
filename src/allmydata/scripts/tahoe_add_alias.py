@@ -52,7 +52,7 @@ def add_alias(options):
     print >>stdout, "Alias %s added" % quote_output(alias)
     return 0
 
-def create_alias(options):
+def create_alias(options, alias_file="aliases"):
     # mkdir+add_alias
     nodedir = options['node-directory']
     alias = options.alias
@@ -71,7 +71,7 @@ def create_alias(options):
         print >>stderr, "Alias %s already exists!" % quote_output(alias)
         return 1
 
-    aliasfile = os.path.join(nodedir, "private", "aliases")
+    aliasfile = os.path.join(nodedir, "private", alias_file)
 
     nodeurl = options['node-url']
     if not nodeurl.endswith("/"):
