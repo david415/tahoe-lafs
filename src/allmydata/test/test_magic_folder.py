@@ -213,6 +213,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         self.client = self.g.clients[0]
         self.stats_provider = self.client.stats_provider
+
         d = self.create_invite_join_magic_folder(u"Alice", self.local_dir)
         d.addCallback(self._create_magicfolder)
 
@@ -253,10 +254,13 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         self.client = self.g.clients[0]
         self.stats_provider = self.client.stats_provider
 
-        d = self.client.create_dirnode()
-
-        d.addCallback(self._made_upload_dir)
+        d = self.create_invite_join_magic_folder(u"Alice", self.local_dir)
         d.addCallback(self._create_magicfolder)
+        #d = self.client.create_dirnode()
+        #d.addCallback(self._made_upload_dir)
+        #d.addCallback(self._create_magicfolder)
+
+        d.addCallback(lambda x: self.magicfolder._upload_dirnode)
 
         # Write something short enough for a LIT file.
         d.addCallback(lambda ign: self._check_file(u"short", "test"))
@@ -312,7 +316,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('magic_folder.objects_disappeared'),
                                                                  previously_disappeared + 1))
         else:
-            d.addCallback(lambda ign: self.upload_dirnode.get(name_u))
+            d.addCallback(lambda ign: self.magic_folder.upload_dirnode.get(name_u))
             d.addCallback(download_to_data)
             d.addCallback(lambda actual_data: self.failUnlessReallyEqual(actual_data, data))
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('magic_folder.objects_succeeded'),
@@ -334,6 +338,8 @@ class MockTest(MagicFolderTestMixin, unittest.TestCase):
 
     def test_errors(self):
         self.set_up_grid()
+        self.local_dir = abspath_expanduser_unicode(u"test_errors", base=self.basedir)
+        self.mkdir_nonascii(self.local_dir)
 
         errors_dir = abspath_expanduser_unicode(u"errors_dir", base=self.basedir)
         os.mkdir(errors_dir)
@@ -342,29 +348,29 @@ class MockTest(MagicFolderTestMixin, unittest.TestCase):
         magicfolderdb = abspath_expanduser_unicode(u"magicfolderdb", base=self.basedir)
         doesnotexist  = abspath_expanduser_unicode(u"doesnotexist", base=self.basedir)
 
-        client = self.g.clients[0]
-        d = client.create_dirnode()
+        self.client = self.g.clients[0]
+        d = self.create_invite_join_magic_folder(u"Alice", self.local_dir)
+        d.addCallback(self._create_magicfolder)
         def _check_errors(n):
-            self.failUnless(IDirectoryNode.providedBy(n))
-            upload_dircap = n.get_uri()
-            readonly_dircap = n.get_readonly_uri()
+            upload_dircap = self.upload_dircap
+            readonly_dircap = self.collective_dircap
 
             self.shouldFail(AssertionError, 'nonexistent local.directory', 'there is no directory',
-                            MagicFolder, client, upload_dircap, '', doesnotexist, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, self.client, self.upload_dircap, self.collective_dircap, doesnotexist, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'non-directory local.directory', 'is not a directory',
-                            MagicFolder, client, upload_dircap, '', not_a_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, self.client, self.upload_dircap, self.collective_dircap, not_a_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'bad upload.dircap', 'does not refer to a directory',
-                            MagicFolder, client, 'bad', '', errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, self.client, 'bad', self.collective_dircap, self.local_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'non-directory upload.dircap', 'does not refer to a directory',
-                            MagicFolder, client, 'URI:LIT:foo', '', errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, self.client, 'URI:LIT:foo', self.collective_dircap, self.local_dir, magicfolderdb, inotify=fake_inotify)
             self.shouldFail(AssertionError, 'readonly upload.dircap', 'is not a writecap to a directory',
-                            MagicFolder, client, readonly_dircap, '', errors_dir, magicfolderdb, inotify=fake_inotify)
+                            MagicFolder, self.client, self.collective_dircap, self.collective_dircap, self.local_dir, magicfolderdb, inotify=fake_inotify)
 
             def _not_implemented():
                 raise NotImplementedError("blah")
             self.patch(magic_folder, 'get_inotify_module', _not_implemented)
             self.shouldFail(NotImplementedError, 'unsupported', 'blah',
-                            MagicFolder, client, upload_dircap, '', errors_dir, magicfolderdb)
+                            MagicFolder, self.client, upload_dircap, '', errors_dir, magicfolderdb)
         d.addCallback(_check_errors)
         return d
 
