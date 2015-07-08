@@ -199,6 +199,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         a second time. This test is meant to test the database persistence along with
         the startup and shutdown code paths of the magic-folder service.
         """
+        print "calling set up grid"
         self.set_up_grid()
         self.local_dir = abspath_expanduser_unicode(u"test_persistence", base=self.basedir)
         self.mkdir_nonascii(self.local_dir)
@@ -231,17 +232,19 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             def setup_stats(result):
                 print "setup_stats"
                 self.client = None
+                print "calling set up grid"
                 self.set_up_grid(client_config_hooks={0: write_config})
                 self.client = self.g.clients[0]
                 self.stats_provider = self.client.stats_provider
                 self.magicfolder = self.client.getServiceNamed("magic-folder")
+                print "upload path ", self.magicfolder._local_dir
+                print "ready ", self.magicfolder.is_ready
                 d4 = defer.Deferred()
                 self.magicfolder.set_processed_callback(d4.callback, ignore_count=0)
                 return d4
 
             d3.addBoth(self.cleanup)
             d3.addCallback(setup_stats)
-            #d3.addCallback(self._create_magicfolder)
             return d3
         d.addCallback(restart)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('magic_folder.objects_succeeded'), 0))

@@ -182,6 +182,41 @@ class MagicFolder(service.MultiService):
                     extension += [(name, file_node, metadata)]
         return extension
 
+    def _get_collective_version_of_file(self, filename):
+        print "_get_collective_version_of_file"
+        magic_name = magicpath.path2magic(filename)
+        upload_readonly_dircap = self._upload_dirnode.get_readonly_uri()
+        collective_dirmap_d = self._collective_dirnode.list()
+        def do_filter(result):
+            def not_mine(x):
+                return result[x][0].get_readonly_uri() != upload_readonly_dircap
+            others = filter(not_mine, result.keys())
+            return result, others
+        collective_dirmap_d.addCallback(do_filter)
+        def scan_remote(nickname, dirnode):
+            print "scan_remote"
+            listing_d = dirnode.list()
+            def scan_listing(listing_map):
+                print "scan_listing"
+                if magic_name in listing_map.keys():
+                    print "magic name found"
+                    file_node, metadata = listing_map[name]
+                    return metadata['version']
+                else:
+                    print "magic name not found"
+                    return None
+            listing_d.addCallback(scan_listing)
+            return listing_d
+        def scan_collective(result):
+            print "scan_collective"
+            d = defer.succeed(None)
+            collective_dirmap, others_list = result
+            for dir_name in others_list:
+                d.addCallback(lambda x, dir_name=dir_name: scan_remote(dir_name, collective_dirmap[dir_name][0]))
+            return d
+        collective_dirmap_d.addCallback(scan_collective)
+        return collective_dirmap_d
+
     def _download_file(self, name, file_node):
         d = file_node.download_best_version()
         def succeeded(res):
@@ -200,18 +235,10 @@ class MagicFolder(service.MultiService):
     def _write_downloaded_file(self, name, file_contents):
         print "_write_downloaded_file: no-op."
 
-    def _db_file_is_uploaded(self, childpath):
-        """_db_file_is_uploaded returns true if the file was previously uploaded
-        """
-        assert self._db != None
-        r = self._db.check_file(childpath)
-        filecap = r.was_uploaded()
-        if filecap is False:
-            return False
-        else:
-            return True
-
     def _scan(self, localpath):
+        print "SCCCCCCCCCCAAAAAAAAAAAAAAAAANNNNNNNNNNNN"
+        print "localpath ", localpath
+
         if not os.path.isdir(localpath):
             raise AssertionError("Programmer error: _scan() must be passed a directory path.")
         quoted_path = quote_local_unicode_path(localpath)
@@ -239,9 +266,18 @@ class MagicFolder(service.MultiService):
                 # recurse on the child directory
                 self._scan(childpath)
             elif isfile:
-                is_uploaded = self._db_file_is_uploaded(childpath)
-                if not is_uploaded:
+                print "FOUND LOCAL FILE"
+                file_version = self._db.get_local_file_version(childpath)
+                print "VERSION IS ", file_version
+                if file_version is None:
+                    # XXX
                     self._append_to_upload_deque(childpath)
+                else:
+                    # XXX handle case where we have a lesser version than what is in the collective directory
+                    print "local file version is not None"
+                    collective_version = self._get_collective_version_of_file(childpath)
+                    if collective_version is not None and file_version > collective_version:
+                        self._append_to_upload_deque(childpath)
             else:
                 self.warn("WARNING: cannot backup special file %s" % quote_local_unicode_path(childpath))
 
@@ -252,9 +288,6 @@ class MagicFolder(service.MultiService):
 
         service.MultiService.startService(self)
         d = self._notifier.startReading()
-
-        self._scan(self._local_dir)
-
         self._stats_provider.count('magic_folder.dirs_monitored', 1)
         return d
 
@@ -262,7 +295,9 @@ class MagicFolder(service.MultiService):
         """ready is used to signal us to start
         processing the upload and download items...
         """
+        print "READY"
         self.is_ready = True
+        self._scan(self._local_dir)
         self._turn_upload_deque()
         self._turn_download_deque()
 
