@@ -235,6 +235,9 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
                 self.client = self.g.clients[0]
                 self.stats_provider = self.client.stats_provider
                 self.magicfolder = self.client.getServiceNamed("magic-folder")
+                d4 = defer.Deferred()
+                self.magicfolder.set_processed_callback(d4.callback, ignore_count=0)
+                return d4
 
             d3.addBoth(self.cleanup)
             d3.addCallback(setup_stats)
