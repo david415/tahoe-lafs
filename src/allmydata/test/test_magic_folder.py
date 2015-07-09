@@ -243,9 +243,9 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
                 self.magicfolder.set_processed_callback(d4.callback, ignore_count=0)
                 return d4
 
-            d3.addBoth(self.cleanup)
             d3.addCallback(setup_stats)
             return d3
+        d.addCallback(self.cleanup)
         d.addCallback(restart)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('magic_folder.objects_succeeded'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('magic_folder.objects_queued'), 0))
