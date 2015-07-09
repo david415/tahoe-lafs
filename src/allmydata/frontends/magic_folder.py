@@ -298,6 +298,7 @@ class MagicFolder(service.MultiService):
         print "READY"
         self.is_ready = True
         self._scan(self._local_dir)
+        self._scan_remote_collective()
         self._turn_upload_deque()
         self._turn_download_deque()
 
