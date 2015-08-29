@@ -15,6 +15,8 @@ class _CreateBaseOptions(BasedirOptions):
         ("introducer", "i", None, "Specify the introducer FURL to use."),
         ("webport", "p", "tcp:3456:interface=127.0.0.1",
          "Specify which TCP port to run the HTTP interface on. Use 'none' to disable."),
+        ("listen", "", None, "Specify a Twisted server endpoint descriptor string to be used for our storage service listener."),
+        ("location", "", None, "Specify a foolscap client connection hint string to advertise as our storage service."), 
         ("basedir", "C", None, "Specify which Tahoe base directory should be used. This has the same effect as the global --node-directory option. [default: %s]"
          % quote_local_unicode_path(_default_nodedir)),
 
@@ -33,7 +35,7 @@ class CreateNodeOptions(CreateClientOptions):
     optFlags = [
         ("no-storage", None, "Do not offer storage service to other nodes."),
         ]
-    synopsis = "[options] [NODEDIR]"
+    synopsis = "--listen=... --location=... [options] [NODEDIR]"
     description = "Create a full Tahoe-LAFS node (client+server)."
 
 class CreateIntroducerOptions(NoDefaultBasedirOptions):
@@ -92,8 +94,17 @@ def write_node_config(c, config):
         webport = ""
     c.write("web.port = %s\n" % (webport.encode('utf-8'),))
     c.write("web.static = public_html\n")
-    c.write("#tub.port =\n")
-    c.write("#tub.location = \n")
+
+    listen = argv_to_unicode(config.get("listen"))
+    c.write("tub.listen = %s\n" % listen)
+
+    location = argv_to_unicode(config.get("location"))
+    if location is None:
+        pass # XXX use foolscap plugin to asynchronously derive
+             # the client connection hint
+    else:
+        c.write("tub.location = %s\n" % location)
+
     c.write("#log_gatherer.furl =\n")
     c.write("#timeout.keepalive =\n")
     c.write("#timeout.disconnect =\n")
@@ -116,6 +127,12 @@ def create_node(config, out=sys.stdout, err=sys.stderr):
         # we're willing to use an empty directory
     else:
         os.mkdir(basedir)
+
+    if not config.get("listen", ""):
+        print >>out, "Please use the commandline argument --listen=...!"
+        print >>out, "The node cannot be created without it."
+        return -1
+
     f = open(os.path.join(basedir, "tahoe-client.tac"), "w")
     f.write(client_tac)
     f.close()
