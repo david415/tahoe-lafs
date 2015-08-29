@@ -209,6 +209,21 @@ class Node(service.MultiService):
         self.write_config("my_nodeid", b32encode(self.nodeid).lower() + "\n")
         self.short_nodeid = b32encode(self.nodeid).lower()[:8] # ready for printing
 
+        portnum = l.getPortnum()
+        location = self.get_config("node", "tub.location", "AUTO")
+        # Replace the location "AUTO", if present, with the detected local addresses.
+        split_location = location.split(",")
+        if "AUTO" in split_location:
+            while "AUTO" in split_location:
+                split_location.remove("AUTO")
+
+            local_addresses = foolscap.util.get_all_ip_addresses()
+            for ip in ip_addresses:
+                split_location.extend([ "%s:%d" % (addr, portnum)
+                                        for addr in local_addresses ])
+            for location in split_location:
+                self.tub.setLocation(location)
+
         tubport = self.get_config("node", "tub.port", "tcp:0")
         self.tub.listenOn(tubport)
         # we must wait until our service has started before we can find out
@@ -317,33 +332,10 @@ class Node(service.MultiService):
             os.chmod("twistd.pid", 0644)
         except EnvironmentError:
             pass
-        # Delay until the reactor is running.
-        eventually(self._startService)
-
-    def _startService(self):
-        precondition(reactor.running)
-        self.log("Node._startService")
 
         service.MultiService.startService(self)
-        d = defer.succeed(None)
-        d.addCallback(self._setup_tub)
-        def _ready(res):
-            self.log("%s running" % self.NODETYPE)
-            self._tub_ready_observerlist.fire(self)
-            return self
-        d.addCallback(_ready)
-        d.addErrback(self._service_startup_failed)
-
-    def _service_startup_failed(self, failure):
-        self.log('_startService() failed')
-        log.err(failure)
-        print "Node._startService failed, aborting"
-        print failure
-        #reactor.stop() # for unknown reasons, reactor.stop() isn't working.  [ ] TODO
-        self.log('calling os.abort()')
-        twlog.msg('calling os.abort()') # make sure it gets into twistd.log
-        print "calling os.abort()"
-        os.abort()
+        self.log("%s running" % self.NODETYPE)
+        self._tub_ready_observerlist.fire(self)
 
     def stopService(self):
         self.log("Node.stopService")
@@ -387,39 +379,6 @@ class Node(service.MultiService):
 
     def log(self, *args, **kwargs):
         return log.msg(*args, **kwargs)
-
-    def _setup_tub(self, ign):
-        # we can't get a dynamically-assigned portnum until our Tub is
-        # running, which means after startService.
-        l = self.tub.getListeners()[0]
-        portnum = l.getPortnum()
-        # record which port we're listening on, so we can grab the same one
-        # next time
-        fileutil.write_atomically(self._portnumfile, "%d\n" % portnum, mode="")
-
-        location = self.get_config("node", "tub.location", "AUTO")
-
-        # Replace the location "AUTO", if present, with the detected local addresses.
-        split_location = location.split(",")
-        if "AUTO" in split_location:
-            d = iputil.get_local_addresses_async()
-            def _add_local(local_addresses):
-                while "AUTO" in split_location:
-                    split_location.remove("AUTO")
-
-                split_location.extend([ "%s:%d" % (addr, portnum)
-                                        for addr in local_addresses ])
-                return ",".join(split_location)
-            d.addCallback(_add_local)
-        else:
-            d = defer.succeed(location)
-
-        def _got_location(location):
-            self.log("Tub location set to %s" % (location,))
-            self.tub.setLocation(location)
-            return self.tub
-        d.addCallback(_got_location)
-        return d
 
     def when_tub_ready(self):
         return self._tub_ready_observerlist.when_fired()
