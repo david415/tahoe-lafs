@@ -152,6 +152,7 @@ class Uploader(QueueMixin):
         QueueMixin.__init__(self, client, local_path_u, db, 'uploader')
 
         self.is_ready = False
+        self.ignore_suffixes = ['.backup', '.tmp']
 
         # TODO: allow a path rather than a cap URI.
         self._upload_dirnode = self._client.create_node_from_uri(upload_dircap)
@@ -225,6 +226,9 @@ class Uploader(QueueMixin):
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
         path_u = unicode_from_filepath(path)
+        for suffix in self.ignore_suffixes:
+            if path_u.endswith(suffix):
+                return
         self._append_to_deque(path_u)
 
     def _when_queue_is_empty(self):
