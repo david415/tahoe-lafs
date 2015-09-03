@@ -118,9 +118,9 @@ class QueueMixin(HookMixin):
         self._client.stats_provider.count('magic_folder.%s.%s' % (self._name, counter_name), delta)
 
     def _log(self, msg):
-        s = "Magic Folder %s: %s" % (self._name, msg)
+        s = "Magic Folder %s %s: %s" % (self._local_path_u, self._name, msg)
         self._client.log(s)
-        #print s
+        print s
         #open("events", "ab+").write(msg)
 
     def _append_to_deque(self, path):
@@ -471,9 +471,9 @@ class Downloader(QueueMixin):
                 file_node, metadata = listing_map[name]
                 local_version = self._get_local_latest(name)
                 remote_version = metadata.get('version', None)
-                print "%r has local version %r, remote version %r" % (name, local_version, remote_version)
+                self._log("%r has local version %r, remote version %r" % (name, local_version, remote_version))
                 if local_version is None or remote_version is None or local_version < remote_version:
-                    print "added to download queue\n"
+                    self._log("added to download queue\n")
                     self._append_to_batch(name, file_node, metadata)
         d.addCallback(scan_listing)
         return d
