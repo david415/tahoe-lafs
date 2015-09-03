@@ -395,7 +395,7 @@ class MagicFolderDB(BackupDB):
             return row[0]
 
     def did_upload_file(self, filecap, path, version, mtime, ctime, size):
-        #print "_did_upload_file(%r, %r, %r, %r, %r, %r)" % (filecap, path, version, mtime, ctime, size)
+        print "_did_upload_file(%r, %r, %r, %r, %r, %r)" % (filecap, path, version, mtime, ctime, size)
         now = time.time()
         fileid = self.get_or_allocate_fileid_for_cap(filecap)
         try:

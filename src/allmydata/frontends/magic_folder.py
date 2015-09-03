@@ -313,7 +313,10 @@ class Uploader(QueueMixin):
                         self._count('files_uploaded')
                     d2.addCallback(lambda x: self._get_filenode(encoded_name_u))
                     d2.addCallback(add_db_entry)
-
+                    def print_db_entry(result):
+                        file_version = self._db.get_local_file_version(relpath_u)
+                        print "print_db_entry: file %s file_version %s" % (relpath_u, file_version)
+                    d2.addCallback(print_db_entry)
                 d2.addCallback(lambda x: Exception("file does not exist"))  # FIXME wrong
                 return d2
             elif pathinfo.islink:
@@ -339,6 +342,7 @@ class Uploader(QueueMixin):
                     version = 0
                 else:
                     version += 1
+                print "isfile %s LOCAL version %s" % (relpath_u, version)
 
                 uploadable = FileName(path_u, self._client.convergence)
                 d2 = self._upload_dirnode.add_file(encoded_name_u, uploadable, metadata={"version":version}, overwrite=True)
@@ -347,6 +351,8 @@ class Uploader(QueueMixin):
                     # XXX maybe just pass pathinfo
                     self._db.did_upload_file(filecap, relpath_u, version,
                                              pathinfo.mtime, pathinfo.ctime, pathinfo.size)
+                    file_version = self._db.get_local_file_version(relpath_u)
+                    print "print_db_entry: file_version %s" % file_version
                     self._count('files_uploaded')
                 d2.addCallback(add_db_entry)
                 return d2
@@ -415,14 +421,19 @@ class Downloader(QueueMixin):
         We check the remote metadata version against our magic-folder db version number;
         latest version wins.
         """
+        print "_should_download: relpath_u %s remote_version %s" % (relpath_u, remote_version)
         v = self._db.get_local_file_version(relpath_u)
-        return (v is None or v < remote_version)
+        self._log("_should_download: local version %s\n" % (v,))
+        ret = (v is None or v < remote_version)
+        print "_should_download: %s" % (ret,)
+        return ret
 
     def _get_local_latest(self, path_u):
         """_get_local_latest takes a unicode path string checks to see if this file object
         exists in our magic-folder db; if not then return None
         else check for an entry in our magic-folder db and return the version number.
         """
+        print "_get_local_latest: path_u %s" % (path_u,)
         if not os.path.exists(path_u):
             return None
         return self._db.get_local_file_version(path_u)
