@@ -26,13 +26,22 @@ IN_EXCL_UNLINK = 0x04000000L
 IGNORE_SUFFIXES = ['.backup', '.tmp']
 IGNORE_PREFIXES = ['.']
 
-def should_ignore_file(relpath_u):
+def should_ignore_file(path_u):
     for suffix in IGNORE_SUFFIXES:
         if path_u.endswith(suffix):
             return True
-    for prefix in IGNORE_PREFIXES:
-        if path_u.startswith(prefix):
-            return True
+    while True:
+        head, tail = os.path.split(path_u)
+        if tail != "":
+            for prefix in IGNORE_PREFIXES:
+                if path_u.startswith(prefix):
+                    return True
+                else:
+                    path_u = head
+        else:
+            if head == "":
+                return False
+        
     return False
 
 def get_inotify_module():
