@@ -50,8 +50,6 @@ class MagicFolderTestMixin(MagicFolderTestMixin, ShouldFailMixin, ReallyEqualMix
         self.magicfolder.setServiceParent(self.client)
         self.magicfolder.ready()
 
-    # Prevent unclean reactor errors.
-
     def test_db_basic(self):
         fileutil.make_dirs(self.basedir)
         self._createdb()

@@ -23,27 +23,6 @@ from allmydata import backupdb, magicpath
 
 IN_EXCL_UNLINK = 0x04000000L
 
-IGNORE_SUFFIXES = ['.backup', '.tmp']
-IGNORE_PREFIXES = ['.']
-
-def should_ignore_file(path_u):
-    for suffix in IGNORE_SUFFIXES:
-        if path_u.endswith(suffix):
-            return True
-    while True:
-        head, tail = os.path.split(path_u)
-        if tail != "":
-            for prefix in IGNORE_PREFIXES:
-                if path_u.startswith(prefix):
-                    return True
-                else:
-                    path_u = head
-        else:
-            if head == "":
-                return False
-        
-    return False
-
 def get_inotify_module():
     try:
         if sys.platform == "win32":
@@ -246,7 +225,7 @@ class Uploader(QueueMixin):
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
         path_u = unicode_from_filepath(path)
-        if not should_ignore_file(path_u):
+        if not magicpath.should_ignore_file(path_u):
             self._append_to_deque(path_u)
 
     def _when_queue_is_empty(self):
