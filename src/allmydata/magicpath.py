@@ -9,7 +9,7 @@ def magic2path(path):
     return re.sub(ur'@[_@]', lambda m: {u'@_': u'/', u'@@': u'@'}[m.group(0)], path)
 
 
-IGNORE_SUFFIXES = ['.backup', '.tmp']
+IGNORE_SUFFIXES = ['.backup', '.tmp', '.conflicted']
 IGNORE_PREFIXES = ['.']
 
 def should_ignore_file(path_u):
