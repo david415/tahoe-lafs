@@ -338,6 +338,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             print "Bob waits for a download\n"
             clock.advance(4)
             d2 = self.bob_magicfolder.downloader.set_hook('processed')
+            clock.advance(4)
             return d2
 
         d.addCallback(Bob_wait_for_download)
@@ -350,6 +351,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             print "Alice deletes the file!\n"
             os.unlink(self.file_path)
             self.notify(to_filepath(self.file_path), self.inotify.IN_DELETE)
+            clock.advance(4)
             return None
 
         d.addCallback(Alice_delete_file)
