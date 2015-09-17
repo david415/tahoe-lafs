@@ -13,6 +13,7 @@ from allmydata.test.no_network import GridTestMixin
 from allmydata.test.common_util import ReallyEqualMixin, NonASCIIPathMixin
 from allmydata.test.common import ShouldFailMixin
 from .test_cli_magic_folder import MagicFolderCLITestMixin
+from twisted.internet.task import Clock
 
 from allmydata.frontends import magic_folder
 from allmydata.frontends.magic_folder import MagicFolder, Downloader
@@ -298,7 +299,8 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         self.failUnlessEqual(version, expected_version)
 
     def test_alice_bob(self):
-        d = self.setup_alice_and_bob()
+        clock = Clock()
+        d = self.setup_alice_and_bob(clock=clock)
         def get_results(result):
             # XXX are these used?
             (self.alice_collective_dircap, self.alice_upload_dircap, self.alice_magicfolder,
@@ -313,14 +315,17 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             fileutil.write(self.file_path, "meow, meow meow. meow? meow meow! meow.")
             self.magicfolder = self.alice_magicfolder
             self.notify(to_filepath(self.file_path), self.inotify.IN_CLOSE_WRITE)
-
+            clock.advance(4)
         d.addCallback(Alice_write_a_file)
 
         def Alice_wait_for_upload(result):
             print "Alice waits for an upload\n"
             d2 = self.alice_magicfolder.uploader.set_hook('processed')
+            clock.advance(4)
             return d2
+
         d.addCallback(Alice_wait_for_upload)
+
         d.addCallback(lambda ign: self._check_version_in_dmd(self.alice_magicfolder, u"file1", 0))
         d.addCallback(lambda ign: self._check_version_in_local_db(self.alice_magicfolder, u"file1", 0))
 
@@ -331,21 +336,23 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         def Bob_wait_for_download(result):
             print "Bob waits for a download\n"
+            clock.advance(2)
             d2 = self.bob_magicfolder.downloader.set_hook('processed')
             return d2
+
         d.addCallback(Bob_wait_for_download)
         d.addCallback(lambda ign: self._check_version_in_local_db(self.bob_magicfolder, u"file1", 0))
         d.addCallback(lambda ign: self._check_version_in_dmd(self.bob_magicfolder, u"file1", 0)) # XXX prolly not needed
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('downloader.objects_downloaded', client=self.bob_magicfolder._client), 1))
-
 
         # test deletion of file behavior
         def Alice_delete_file(result):
             print "Alice deletes the file!\n"
             os.unlink(self.file_path)
             self.notify(to_filepath(self.file_path), self.inotify.IN_DELETE)
-
+            clock.advance(4)
             return None
+
         d.addCallback(Alice_delete_file)
         d.addCallback(Alice_wait_for_upload)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded', client=self.alice_magicfolder._client), 2))
@@ -364,8 +371,9 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             fileutil.write(self.file_path, "Alice suddenly sees the white rabbit running into the forest.")
             self.magicfolder = self.alice_magicfolder
             self.notify(to_filepath(self.file_path), self.inotify.IN_CLOSE_WRITE)
-        d.addCallback(Alice_rewrite_file)
+            clock.advance(4)
 
+        d.addCallback(Alice_rewrite_file)
         d.addCallback(Alice_wait_for_upload)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded', client=self.alice_magicfolder._client), 3))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded', client=self.alice_magicfolder._client), 3))
@@ -380,6 +388,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             d.addCallback(lambda ign: self.alice_magicfolder.finish())
             d.addCallback(lambda ign: self.bob_magicfolder.finish())
             d.addCallback(lambda ign: result)
+            clock.advance(4)
             return d
         d.addCallback(cleanup_Alice_and_Bob)
         return d
