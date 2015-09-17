@@ -45,7 +45,7 @@ class MagicFolder(service.MultiService):
     name = 'magic-folder'
 
     def __init__(self, client, upload_dircap, collective_dircap, local_path_u, dbfile,
-                 pending_delay=1.0):
+                 pending_delay=1.0, clock=reactor):
         precondition_abspath(local_path_u)
 
         service.MultiService.__init__(self)
@@ -60,8 +60,8 @@ class MagicFolder(service.MultiService):
 
         self.is_ready = False
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay)
-        self.downloader = Downloader(client, local_path_u, db, collective_dircap)
+        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay, clock)
+        self.downloader = Downloader(client, local_path_u, db, collective_dircap, clock)
 
     def startService(self):
         # TODO: why is this being called more than once?
@@ -126,12 +126,13 @@ class RemoteScanMixin(object):
         return collective_dirmap_d
 
 class QueueMixin(HookMixin):
-    def __init__(self, client, local_path_u, db, name):
+    def __init__(self, client, local_path_u, db, name, clock):
         self._client = client
         self._local_path_u = local_path_u
         self._local_path = to_filepath(local_path_u)
         self._db = db
         self._name = name
+        self._clock = clock
         self._hooks = {'processed': None, 'started': None}
         self.started_d = self.set_hook('started')
 
@@ -166,7 +167,7 @@ class QueueMixin(HookMixin):
         self._pending.add(path)
         self._count('objects_queued')
         if self.is_ready:
-            reactor.callLater(0, self._turn_deque)
+            self._clock.callLater(0, self._turn_deque)
 
     def _turn_deque(self):
         if self._stopped:
@@ -180,12 +181,12 @@ class QueueMixin(HookMixin):
             self._lazy_tail.addCallback(lambda ign: self._process(item))
             self._lazy_tail.addBoth(self._call_hook, 'processed')
             self._lazy_tail.addErrback(log.err)
-            self._lazy_tail.addCallback(lambda ign: task.deferLater(reactor, self._turn_delay, self._turn_deque))
+            self._lazy_tail.addCallback(lambda ign: task.deferLater(self._clock, self._turn_delay, self._turn_deque))
 
 
 class Uploader(QueueMixin, RemoteScanMixin):
-    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay):
-        QueueMixin.__init__(self, client, local_path_u, db, 'uploader')
+    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay, clock):
+        QueueMixin.__init__(self, client, local_path_u, db, 'uploader', clock)
         RemoteScanMixin.__init__(self)
 
         self.is_ready = False
@@ -425,8 +426,8 @@ class Uploader(QueueMixin, RemoteScanMixin):
 
 
 class Downloader(QueueMixin, RemoteScanMixin):
-    def __init__(self, client, local_path_u, db, collective_dircap):
-        QueueMixin.__init__(self, client, local_path_u, db, 'downloader')
+    def __init__(self, client, local_path_u, db, collective_dircap, clock):
+        QueueMixin.__init__(self, client, local_path_u, db, 'downloader', clock)
         RemoteScanMixin.__init__(self)
 
         # TODO: allow a path rather than a cap URI.
@@ -532,7 +533,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
         return extension
 
     def _when_queue_is_empty(self):
-        d = task.deferLater(reactor, self._turn_delay, self._scan_remote_collective)
+        d = task.deferLater(self._clock, self._turn_delay, self._scan_remote_collective)
         d.addCallback(lambda ign: self._turn_deque())
         return d
 
