@@ -96,7 +96,7 @@ class QueueMixin(HookMixin):
     def __init__(self, client, local_path_u, db, name):
         self._client = client
         self._local_path_u = local_path_u
-        self._local_filepath = to_filepath(local_path_u)
+        self._local_filepath = to_filepath(local_path_u.encode("utf-8")) # XXX correct?
         self._db = db
         self._name = name
         self._hooks = {'processed': None, 'started': None}
@@ -121,9 +121,10 @@ class QueueMixin(HookMixin):
         return unicode_from_filepath(self._local_filepath.preauthChild(relpath_u))
 
     def _get_relpath(self, filepath):
-        print "_get_relpath(%r)" % (filepath,)
-        segments = filepath.asTextMode().segmentsFrom(self._local_filepath.asTextMode())
-        print "segments = %r" % (segments,)
+        s = self._local_filepath
+        #s = self._local_filepath.asTextMode()
+        segments = filepath.segmentsFrom(s)
+        #segments = filepath.asTextMode().segmentsFrom(s)
         return u"/".join(segments)
 
     def _count(self, counter_name, delta=1):
@@ -252,6 +253,7 @@ class Uploader(QueueMixin):
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
         relpath_u = self._get_relpath(path)
+        #relpath_u = relpath_u.encode("utf-8")
         self._append_to_deque(relpath_u)
 
     def _when_queue_is_empty(self):
