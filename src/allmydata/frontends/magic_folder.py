@@ -50,6 +50,7 @@ class MagicFolder(service.MultiService):
 
         service.MultiService.__init__(self)
 
+        print "__init__"
         db = backupdb.get_backupdb(dbfile, create_version=(backupdb.SCHEMA_v3, 3))
         if db is None:
             return Failure(Exception('ERROR: Unable to load magic folder db.'))
@@ -64,6 +65,7 @@ class MagicFolder(service.MultiService):
         self.downloader = Downloader(client, local_path_u, db, collective_dircap, clock)
 
     def startService(self):
+        print "startService"
         # TODO: why is this being called more than once?
         if self.running:
             return defer.succeed(None)
@@ -75,6 +77,7 @@ class MagicFolder(service.MultiService):
         """ready is used to signal us to start
         processing the upload and download items...
         """
+        print "ready"
         self.is_ready = True
         d = self.uploader.start_scanning()
         d2 = self.downloader.start_scanning()
@@ -82,13 +85,14 @@ class MagicFolder(service.MultiService):
         return d
 
     def finish(self):
-        #print "finish"
+        print "finish"
         d = self.uploader.stop()
         d2 = self.downloader.stop()
         d.addCallback(lambda ign: d2)
         return d
 
     def remove_service(self):
+        print "remove_service"
         return service.MultiService.disownServiceParent(self)
 
 class RemoteScanMixin(object):
@@ -101,6 +105,7 @@ class RemoteScanMixin(object):
         file node and metadata for the latest version of the file located in the
         magic-folder collective directory.
         """
+        print "_get_collective_latest_file"
         collective_dirmap_d = self._collective_dirnode.list()
         def scan_collective(result):
             list_of_deferreds = []
@@ -161,6 +166,7 @@ class QueueMixin(HookMixin):
         #open("events", "ab+").write(msg)
 
     def _append_to_deque(self, path):
+        self._log("_append_to_deque")
         if path in self._pending:
             return
         self._deque.append(path)
@@ -170,6 +176,7 @@ class QueueMixin(HookMixin):
             self._clock.callLater(0, self._turn_deque)
 
     def _turn_deque(self):
+        self._log("_turn_deque")
         if self._stopped:
             return
         try:
@@ -277,6 +284,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
     def _process_child(self, path_u):
         precondition(isinstance(path_u, unicode), path_u)
 
+        self._log("_process_child")
         pathinfo = get_pathinfo(path_u)
 
         if pathinfo.islink:
@@ -320,6 +328,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
     def _process(self, path_u):
         precondition(isinstance(path_u, unicode), path_u)
 
+        self._log("_process")
         d = defer.succeed(None)
 
         def _maybe_upload(val):
@@ -410,6 +419,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
         return d
 
     def _get_metadata(self, encoded_name_u):
+        self._log("_get_metadata")
         try:
             d = self._upload_dirnode.get_metadata_for(encoded_name_u)
         except KeyError:
@@ -417,6 +427,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
         return d
 
     def _get_filenode(self, encoded_name_u):
+        self._log("_get_filenode")
         try:
             d = self._upload_dirnode.get(encoded_name_u)
         except KeyError:
@@ -450,6 +461,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
         return d
 
     def stop(self):
+        self._log("stop")
         self._stopped = True
         d = defer.succeed(None)
         d.addCallback(lambda ign: self._lazy_tail)
@@ -461,6 +473,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
         We check the remote metadata version against our magic-folder db version number;
         latest version wins.
         """
+        self._log("_should_download")
         v = self._db.get_local_file_version(relpath_u)
         return (v is None or v < remote_version)
 
@@ -469,17 +482,21 @@ class Downloader(QueueMixin, RemoteScanMixin):
         exists in our magic-folder db; if not then return None
         else check for an entry in our magic-folder db and return the version number.
         """
+        self._log("_get_local_latest")
         if not os.path.exists(os.path.join(self._local_path_u,path_u)):
             return None
         return self._db.get_local_file_version(path_u)
 
     def _append_to_batch(self, name, file_node, metadata):
+        self._log("_append_to_batch")
         if self._download_scan_batch.has_key(name):
             self._download_scan_batch[name] += [(file_node, metadata)]
         else:
             self._download_scan_batch[name] = [(file_node, metadata)]
 
     def _scan_remote(self, nickname, dirnode):
+        self._log("_scan_remote")
+        print "_scan_remote"
         self._log("_scan_remote nickname %r" % (nickname,))
         d = dirnode.list()
         def scan_listing(listing_map):
@@ -518,10 +535,12 @@ class Downloader(QueueMixin, RemoteScanMixin):
         return collective_dirmap_d
 
     def _add_batch_to_download_queue(self, result):
+        self._log("_add_batch_to_download_queue")
         self._deque.extend(result)
         self._pending.update(map(lambda x: x[0], result))
 
     def _filter_scan_batch(self, result):
+        self._log("_filter_scan_batch")
         extension = [] # consider whether this should be a dict
         for name in self._download_scan_batch.keys():
             if name in self._pending:
@@ -537,6 +556,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
         return d
 
     def _process(self, item):
+        self._log("_process")
         (name, file_node, metadata) = item
         d = file_node.download_best_version()
         def succeeded(res):
@@ -572,6 +592,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
 
     @classmethod
     def _write_downloaded_file(cls, path, file_contents, is_conflict=False, now=None):
+        print "_write_downloaded_file"
         # 1. Write a temporary file, say .foo.tmp.
         # 2. is_conflict determines whether this is an overwrite or a conflict.
         # 3. Set the mtime of the replacement file to be T seconds before the
@@ -601,6 +622,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
 
     @classmethod
     def _rename_conflicted_file(self, path, replacement_path):
+        print "_rename_conflicted_file"
         conflict_path = path + u".conflict"
         fileutil.rename_no_overwrite(replacement_path, conflict_path)
         return conflict_path
