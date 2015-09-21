@@ -231,10 +231,9 @@ class Uploader(QueueMixin, RemoteScanMixin):
         self._log("stop")
         self._notifier.stopReading()
         self._count('dirs_monitored', -1)
+        d = defer.succeed(None)
         if hasattr(self._notifier, 'wait_until_stopped'):
-            d = self._notifier.wait_until_stopped()
-        else:
-            d = defer.succeed(None)
+            d.addCallback(lambda ign: self._notifier.wait_until_stopped())
         d.addCallback(lambda ign: self._lazy_tail)
         return d
 
