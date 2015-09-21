@@ -157,7 +157,7 @@ class QueueMixin(HookMixin):
     def _log(self, msg):
         s = "Magic Folder %s: %s" % (self._name, msg)
         self._client.log(s)
-        #print s
+        print s
         #open("events", "ab+").write(msg)
 
     def _append_to_deque(self, path):
