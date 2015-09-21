@@ -61,7 +61,7 @@ class MagicFolder(service.MultiService):
 
         self.is_ready = False
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay, clock)
+        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay, collective_dircap, clock)
         self.downloader = Downloader(client, local_path_u, db, collective_dircap, clock)
 
     def startService(self):
@@ -96,8 +96,9 @@ class MagicFolder(service.MultiService):
         return service.MultiService.disownServiceParent(self)
 
 class RemoteScanMixin(object):
-    def __init__(self):
-        pass
+    def __init__(self, collective_dircap):
+        # TODO: allow a path rather than a cap URI.
+        self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
 
     def _get_collective_latest_file(self, filename):
         """_get_collective_latest_file takes a file path pointing to a file managed by
@@ -105,7 +106,7 @@ class RemoteScanMixin(object):
         file node and metadata for the latest version of the file located in the
         magic-folder collective directory.
         """
-        print "_get_collective_latest_file"
+        self._log("_get_collective_latest_file")
         collective_dirmap_d = self._collective_dirnode.list()
         def scan_collective(result):
             list_of_deferreds = []
@@ -192,9 +193,9 @@ class QueueMixin(HookMixin):
 
 
 class Uploader(QueueMixin, RemoteScanMixin):
-    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay, clock):
+    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay, collective_dircap, clock):
         QueueMixin.__init__(self, client, local_path_u, db, 'uploader', clock)
-        RemoteScanMixin.__init__(self)
+        RemoteScanMixin.__init__(self, collective_dircap)
 
         self.is_ready = False
 
@@ -279,6 +280,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
         self._append_to_deque(path_u)
 
     def _when_queue_is_empty(self):
+        self._log("_when_queue_is_empty")
         return defer.succeed(None)
 
     def _process_child(self, path_u):
@@ -438,10 +440,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
 class Downloader(QueueMixin, RemoteScanMixin):
     def __init__(self, client, local_path_u, db, collective_dircap, clock):
         QueueMixin.__init__(self, client, local_path_u, db, 'downloader', clock)
-        RemoteScanMixin.__init__(self)
-
-        # TODO: allow a path rather than a cap URI.
-        self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
+        RemoteScanMixin.__init__(self, collective_dircap)
 
         if not IDirectoryNode.providedBy(self._collective_dirnode):
             raise AssertionError("The URI in 'private/collective_dircap' does not refer to a directory.")
@@ -516,7 +515,8 @@ class Downloader(QueueMixin, RemoteScanMixin):
         self._download_scan_batch = {} # XXX
 
         if self._collective_dirnode is None:
-            return
+            self._log("collective dirnode is None!")
+            return defer.succeed(None)
         collective_dirmap_d = self._collective_dirnode.list()
         def do_list(result):
             others = [x for x in result.keys()]
@@ -551,6 +551,7 @@ class Downloader(QueueMixin, RemoteScanMixin):
         return extension
 
     def _when_queue_is_empty(self):
+        self._log("_when_queue_is_empty")
         d = task.deferLater(self._clock, self._turn_delay, self._scan_remote_collective)
         d.addCallback(lambda ign: self._turn_deque())
         return d
