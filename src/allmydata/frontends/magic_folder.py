@@ -104,6 +104,7 @@ class RemoteScanMixin(object):
         """
         collective_dirmap_d = self._collective_dirnode.list()
         def scan_collective(result):
+            self._log("scan_collective")
             list_of_deferreds = []
             for dir_name in result.keys():
                 # XXX make sure it's a directory
@@ -114,6 +115,7 @@ class RemoteScanMixin(object):
             return deferList
         collective_dirmap_d.addCallback(scan_collective)
         def highest_version(deferredList):
+            self._log("highest_version")
             max_version = 0
             metadata = None
             node = None
@@ -124,6 +126,7 @@ class RemoteScanMixin(object):
                         max_version = result[1]['version']
             return node, metadata
         collective_dirmap_d.addCallback(highest_version)
+        self._log("_get_collective_latest_file end d is %r" % (collective_dirmap_d,))
         return collective_dirmap_d
 
 class QueueMixin(HookMixin):
@@ -157,7 +160,7 @@ class QueueMixin(HookMixin):
     def _log(self, msg):
         s = "Magic Folder %s: %s" % (self._name, msg)
         self._client.log(s)
-        #print s
+        print s
         #open("events", "ab+").write(msg)
 
     def _append_to_deque(self, path):
