@@ -91,6 +91,39 @@ class MagicFolder(service.MultiService):
     def remove_service(self):
         return service.MultiService.disownServiceParent(self)
 
+class RemoteScanMixin(object):
+    def __init__(self):
+        pass
+
+    def _get_collective_latest_file(self, filename):
+        """_get_collective_latest_file takes a file path pointing to a file managed by
+        magic-folder and returns a deferred that fires with the two tuple containing a
+        file node and metadata for the latest version of the file located in the
+        magic-folder collective directory.
+        """
+        collective_dirmap_d = self._collective_dirnode.list()
+        def scan_collective(result):
+            list_of_deferreds = []
+            for dir_name in result.keys():
+                # XXX make sure it's a directory
+                d = defer.succeed(None)
+                d.addCallback(lambda x, dir_name=dir_name: result[dir_name][0].get_child_and_metadata(filename))
+                list_of_deferreds.append(d)
+            deferList = defer.DeferredList(list_of_deferreds, consumeErrors=True)
+            return deferList
+        collective_dirmap_d.addCallback(scan_collective)
+        def highest_version(deferredList):
+            max_version = 0
+            metadata = None
+            node = None
+            for success, result in deferredList:
+                if success:
+                    if result[1]['version'] > max_version:
+                        node, metadata = result
+                        max_version = result[1]['version']
+            return node, metadata
+        collective_dirmap_d.addCallback(highest_version)
+        return collective_dirmap_d
 
 class QueueMixin(HookMixin):
     def __init__(self, client, local_path_u, db, name):
@@ -150,9 +183,10 @@ class QueueMixin(HookMixin):
             self._lazy_tail.addCallback(lambda ign: task.deferLater(reactor, self._turn_delay, self._turn_deque))
 
 
-class Uploader(QueueMixin):
+class Uploader(QueueMixin, RemoteScanMixin):
     def __init__(self, client, local_path_u, db, upload_dircap, pending_delay):
         QueueMixin.__init__(self, client, local_path_u, db, 'uploader')
+        RemoteScanMixin.__init__(self)
 
         self.is_ready = False
 
@@ -390,9 +424,10 @@ class Uploader(QueueMixin):
         return d
 
 
-class Downloader(QueueMixin):
+class Downloader(QueueMixin, RemoteScanMixin):
     def __init__(self, client, local_path_u, db, collective_dircap):
         QueueMixin.__init__(self, client, local_path_u, db, 'downloader')
+        RemoteScanMixin.__init__(self)
 
         # TODO: allow a path rather than a cap URI.
         self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
@@ -437,36 +472,6 @@ class Downloader(QueueMixin):
         if not os.path.exists(os.path.join(self._local_path_u,path_u)):
             return None
         return self._db.get_local_file_version(path_u)
-
-    def _get_collective_latest_file(self, filename):
-        """_get_collective_latest_file takes a file path pointing to a file managed by
-        magic-folder and returns a deferred that fires with the two tuple containing a
-        file node and metadata for the latest version of the file located in the
-        magic-folder collective directory.
-        """
-        collective_dirmap_d = self._collective_dirnode.list()
-        def scan_collective(result):
-            list_of_deferreds = []
-            for dir_name in result.keys():
-                # XXX make sure it's a directory
-                d = defer.succeed(None)
-                d.addCallback(lambda x, dir_name=dir_name: result[dir_name][0].get_child_and_metadata(filename))
-                list_of_deferreds.append(d)
-            deferList = defer.DeferredList(list_of_deferreds, consumeErrors=True)
-            return deferList
-        collective_dirmap_d.addCallback(scan_collective)
-        def highest_version(deferredList):
-            max_version = 0
-            metadata = None
-            node = None
-            for success, result in deferredList:
-                if success:
-                    if result[1]['version'] > max_version:
-                        node, metadata = result
-                        max_version = result[1]['version']
-            return node, metadata
-        collective_dirmap_d.addCallback(highest_version)
-        return collective_dirmap_d
 
     def _append_to_batch(self, name, file_node, metadata):
         if self._download_scan_batch.has_key(name):
