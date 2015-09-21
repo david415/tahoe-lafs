@@ -386,7 +386,8 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         def cleanup_Alice_and_Bob(result):
             d = defer.succeed(None)
             d.addCallback(lambda ign: self.alice_magicfolder.finish())
-            d.addCallback(lambda ign: self.bob_magicfolder.finish())
+            d2 = self.bob_magicfolder.finish()
+            d.addCallback(lambda ign: d2)
             d.addCallback(lambda ign: result)
             clock.advance(4)
             return d
