@@ -60,7 +60,7 @@ class MagicFolder(service.MultiService):
 
         self.is_ready = False
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay)
+        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay, collective_dircap)
         self.downloader = Downloader(client, local_path_u, db, collective_dircap)
 
     def startService(self):
@@ -92,8 +92,9 @@ class MagicFolder(service.MultiService):
         return service.MultiService.disownServiceParent(self)
 
 class RemoteScanMixin(object):
-    def __init__(self):
-        pass
+    def __init__(self, collective_dircap):
+        # TODO: allow a path rather than a cap URI.
+        self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
 
     def _get_collective_latest_file(self, filename):
         """_get_collective_latest_file takes a file path pointing to a file managed by
@@ -184,9 +185,9 @@ class QueueMixin(HookMixin):
 
 
 class Uploader(QueueMixin, RemoteScanMixin):
-    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay):
+    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay, collective_dircap):
         QueueMixin.__init__(self, client, local_path_u, db, 'uploader')
-        RemoteScanMixin.__init__(self)
+        RemoteScanMixin.__init__(self, collective_dircap)
 
         self.is_ready = False
 
@@ -427,10 +428,7 @@ class Uploader(QueueMixin, RemoteScanMixin):
 class Downloader(QueueMixin, RemoteScanMixin):
     def __init__(self, client, local_path_u, db, collective_dircap):
         QueueMixin.__init__(self, client, local_path_u, db, 'downloader')
-        RemoteScanMixin.__init__(self)
-
-        # TODO: allow a path rather than a cap URI.
-        self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
+        RemoteScanMixin.__init__(self, collective_dircap)
 
         if not IDirectoryNode.providedBy(self._collective_dirnode):
             raise AssertionError("The URI in 'private/collective_dircap' does not refer to a directory.")
