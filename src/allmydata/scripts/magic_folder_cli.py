@@ -1,5 +1,6 @@
 
 import os
+import os.path
 from cStringIO import StringIO
 from twisted.python import usage
 
@@ -21,7 +22,10 @@ class CreateOptions(BasedirOptions):
             raise usage.UsageError("An alias must end with a ':' character.")
         self.alias = alias[:-1]
         self.nickname = nickname
-        self.localdir = localdir
+        if not os.path.isabs(localdir):
+            self.localdir = os.path.abspath(localdir)
+        else:
+            self.localdir = localdir
         if self.nickname and not self.localdir:
             raise usage.UsageError("If NICKNAME is specified then LOCALDIR must also be specified.")
         node_url_file = os.path.join(self['node-directory'], "node.url")
@@ -123,6 +127,10 @@ class JoinOptions(BasedirOptions):
     magic_readonly_cap = ""
     def parseArgs(self, invite_code, local_dir):
         BasedirOptions.parseArgs(self)
+        if not os.path.isabs(localdir):
+            self.localdir = os.path.abspath(localdir)
+        else:
+            self.localdir = localdir
         self.local_dir = local_dir
         fields = invite_code.split(INVITE_SEPARATOR)
         if len(fields) != 2:
