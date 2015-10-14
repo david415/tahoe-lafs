@@ -57,7 +57,6 @@ def create(options):
             print >>options.stderr, invite_options.stderr.getvalue()
             return rc
         invite_code = invite_options.stdout.getvalue().strip()
-
         join_options = _delegate_options(options, JoinOptions())
         join_options.invite_code = invite_code
         fields = invite_code.split(INVITE_SEPARATOR)
@@ -123,6 +122,8 @@ class JoinOptions(BasedirOptions):
     magic_readonly_cap = ""
     def parseArgs(self, invite_code, local_dir):
         BasedirOptions.parseArgs(self)
+        if local_dir.startswith('-'):
+            raise usage.UsageError("LOCAL_DIR must not start with a -.")
         self.local_dir = local_dir
         fields = invite_code.split(INVITE_SEPARATOR)
         if len(fields) != 2:
