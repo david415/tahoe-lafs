@@ -2,7 +2,7 @@
 import os, sys
 
 from twisted.trial import unittest
-from twisted.internet import defer
+from twisted.internet import defer, reactor, task
 
 from allmydata.interfaces import IDirectoryNode
 
@@ -311,6 +311,48 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         version = magicfolder._db.get_local_file_version(relpath_u)
         #print "_check_version_in_local_db: %r has version %s" % (relpath_u, version)
         self.failUnlessEqual(version, expected_version)
+
+    def test_upload_retry(self):
+        self.set_up_grid()
+        self.local_dir = os.path.join(self.basedir, self.unicode_or_fallback(u"loc\u0101l_dir", u"local_dir"))
+        self.mkdir_nonascii(self.local_dir)
+        d = self.create_invite_join_magic_folder(u"Alice", self.local_dir)
+        d.addCallback(self._restart_client)
+
+        empty_tree_name = self.unicode_or_fallback(u"empty_tr\u00EAe", u"empty_tree")
+        empty_tree_dir = abspath_expanduser_unicode(empty_tree_name, base=self.basedir)
+        new_empty_tree_dir = abspath_expanduser_unicode(empty_tree_name, base=self.local_dir)
+
+        num_servers = 10
+
+        def unhang_all_servers(result):
+            for server_id in self.g.wrappers_by_id.keys():
+                self.g.unhang_server(server_id)
+
+        def hang_all_servers(result):
+            for server_id in self.g.wrappers_by_id.keys():
+                self.g.hang_server(server_id)
+
+        d.addCallback(hang_all_servers)
+        def later_unhang(result):
+            return task.deferLater(reactor, 3, unhang_all_servers, None)
+        d.addCallback(later_unhang)
+        def _check_move_empty_tree(res):
+
+            self.mkdir_nonascii(empty_tree_dir)
+            d2 = self.magicfolder.uploader.set_hook('processed')
+            os.rename(empty_tree_dir, new_empty_tree_dir)
+            self.notify(to_filepath(new_empty_tree_dir), self.inotify.IN_MOVED_TO)
+            return d2
+        d.addCallback(_check_move_empty_tree)
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 1))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 1))
+
+        d.addBoth(self.cleanup)
+        return d
 
     def test_alice_bob(self):
         d = self.setup_alice_and_bob()
