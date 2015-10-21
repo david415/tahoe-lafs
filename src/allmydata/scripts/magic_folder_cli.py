@@ -1,11 +1,16 @@
 
 import os
+from types import NoneType
 from cStringIO import StringIO
+
 from twisted.python import usage
+
+from allmydata.util.assertutil import precondition
 
 from .common import BaseOptions, BasedirOptions, get_aliases
 from .cli import MakeDirectoryOptions, LnOptions, CreateAliasOptions
 import tahoe_mv
+from allmydata.util.encodingutil import argv_to_abspath, argv_to_unicode, to_str
 from allmydata.util import fileutil
 from allmydata import uri
 
@@ -13,17 +18,18 @@ INVITE_SEPARATOR = "+"
 
 class CreateOptions(BasedirOptions):
     nickname = None
-    localdir = None
-    synopsis = "MAGIC_ALIAS: [NICKNAME LOCALDIR]"
-    def parseArgs(self, alias, nickname=None, localdir=None):
+    local_dir = None
+    synopsis = "MAGIC_ALIAS: [NICKNAME LOCAL_DIR]"
+    def parseArgs(self, alias, nickname=None, local_dir=None):
         BasedirOptions.parseArgs(self)
-        if not alias.endswith(':'):
+        alias = argv_to_unicode(alias)
+        if not alias.endswith(u':'):
             raise usage.UsageError("An alias must end with a ':' character.")
         self.alias = alias[:-1]
-        self.nickname = nickname
-        self.localdir = localdir
-        if self.nickname and not self.localdir:
-            raise usage.UsageError("If NICKNAME is specified then LOCALDIR must also be specified.")
+        self.nickname = None if nickname is None else argv_to_unicode(nickname)
+        self.local_dir = None if local_dir is None else argv_to_abspath(local_dir)
+        if self.nickname and not self.local_dir:
+            raise usage.UsageError("If NICKNAME is specified then LOCAL_DIR must also be specified.")
         node_url_file = os.path.join(self['node-directory'], "node.url")
         self['node-url'] = fileutil.read(node_url_file).strip()
 
@@ -37,6 +43,10 @@ def _delegate_options(source_options, target_options):
     return target_options
 
 def create(options):
+    precondition(isinstance(options.alias, unicode), alias=options.alias)
+    precondition(isinstance(options.nickname, (unicode, NoneType)), nickname=options.nickname)
+    precondition(isinstance(options.local_dir, (unicode, NoneType)), local_dir=options.local_dir)
+
     from allmydata.scripts import tahoe_add_alias
     create_alias_options = _delegate_options(options, CreateAliasOptions())
     create_alias_options.alias = options.alias
@@ -57,14 +67,9 @@ def create(options):
             print >>options.stderr, invite_options.stderr.getvalue()
             return rc
         invite_code = invite_options.stdout.getvalue().strip()
-
         join_options = _delegate_options(options, JoinOptions())
+        join_options.local_dir = options.local_dir
         join_options.invite_code = invite_code
-        fields = invite_code.split(INVITE_SEPARATOR)
-        if len(fields) != 2:
-            raise usage.UsageError("Invalid invite code.")
-        join_options.magic_readonly_cap, join_options.dmd_write_cap = fields
-        join_options.local_dir = options.localdir
         rc = join(join_options)
         if rc != 0:
             print >>options.stderr, "magic-folder: failed to join after create\n"
@@ -78,16 +83,20 @@ class InviteOptions(BasedirOptions):
     stdin = StringIO("")
     def parseArgs(self, alias, nickname=None):
         BasedirOptions.parseArgs(self)
-        if not alias.endswith(':'):
+        alias = argv_to_unicode(alias)
+        if not alias.endswith(u':'):
             raise usage.UsageError("An alias must end with a ':' character.")
         self.alias = alias[:-1]
-        self.nickname = nickname
+        self.nickname = argv_to_unicode(nickname)
         node_url_file = os.path.join(self['node-directory'], "node.url")
         self['node-url'] = open(node_url_file, "r").read().strip()
         aliases = get_aliases(self['node-directory'])
         self.aliases = aliases
 
 def invite(options):
+    precondition(isinstance(options.alias, unicode), alias=options.alias)
+    precondition(isinstance(options.nickname, unicode), nickname=options.nickname)
+
     from allmydata.scripts import tahoe_mkdir
     mkdir_options = _delegate_options(options, MakeDirectoryOptions())
     mkdir_options.where = None
@@ -96,24 +105,28 @@ def invite(options):
     if rc != 0:
         print >>options.stderr, "magic-folder: failed to mkdir\n"
         return rc
+
+    # FIXME this assumes caps are ASCII.
     dmd_write_cap = mkdir_options.stdout.getvalue().strip()
-    dmd_readonly_cap = unicode(uri.from_string(dmd_write_cap).get_readonly().to_string(), 'utf-8')
+    dmd_readonly_cap = uri.from_string(dmd_write_cap).get_readonly().to_string()
     if dmd_readonly_cap is None:
         print >>options.stderr, "magic-folder: failed to diminish dmd write cap\n"
         return 1
 
     magic_write_cap = get_aliases(options["node-directory"])[options.alias]
-    magic_readonly_cap = unicode(uri.from_string(magic_write_cap).get_readonly().to_string(), 'utf-8')
+    magic_readonly_cap = uri.from_string(magic_write_cap).get_readonly().to_string()
+
     # tahoe ln CLIENT_READCAP COLLECTIVE_WRITECAP/NICKNAME
     ln_options = _delegate_options(options, LnOptions())
-    ln_options.from_file = dmd_readonly_cap
-    ln_options.to_file = u"%s/%s" % (magic_write_cap, options.nickname)
+    ln_options.from_file = unicode(dmd_readonly_cap, 'utf-8')
+    ln_options.to_file = u"%s/%s" % (unicode(magic_write_cap, 'utf-8'), options.nickname)
     rc = tahoe_mv.mv(ln_options, mode="link")
     if rc != 0:
         print >>options.stderr, "magic-folder: failed to create link\n"
         print >>options.stderr, ln_options.stderr.getvalue()
         return rc
 
+    # FIXME: this assumes caps are ASCII.
     print >>options.stdout, "%s%s%s" % (magic_readonly_cap, INVITE_SEPARATOR, dmd_write_cap)
     return 0
 
@@ -123,18 +136,20 @@ class JoinOptions(BasedirOptions):
     magic_readonly_cap = ""
     def parseArgs(self, invite_code, local_dir):
         BasedirOptions.parseArgs(self)
-        self.local_dir = local_dir
-        fields = invite_code.split(INVITE_SEPARATOR)
-        if len(fields) != 2:
-            raise usage.UsageError("Invalid invite code.")
-        self.magic_readonly_cap, self.dmd_write_cap = fields
+        self.local_dir = None if local_dir is None else argv_to_abspath(local_dir)
+        self.invite_code = to_str(argv_to_unicode(invite_code))
 
 def join(options):
+    fields = options.invite_code.split(INVITE_SEPARATOR)
+    if len(fields) != 2:
+        raise usage.UsageError("Invalid invite code.")
+    magic_readonly_cap, dmd_write_cap = fields
+
     dmd_cap_file = os.path.join(options["node-directory"], "private/magic_folder_dircap")
     collective_readcap_file = os.path.join(options["node-directory"], "private/collective_dircap")
 
-    fileutil.write(dmd_cap_file, options.dmd_write_cap)
-    fileutil.write(collective_readcap_file, options.magic_readonly_cap)
+    fileutil.write(dmd_cap_file, dmd_write_cap)
+    fileutil.write(collective_readcap_file, magic_readonly_cap)
     fileutil.write(os.path.join(options["node-directory"], "tahoe.cfg"),
                    "[magic_folder]\nenabled = True\nlocal.directory = %s\n"
                    % (options.local_dir.encode('utf-8'),), mode="ab")

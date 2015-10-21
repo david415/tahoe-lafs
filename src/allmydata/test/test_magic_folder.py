@@ -5,6 +5,7 @@ from twisted.trial import unittest
 from twisted.internet import defer, task
 
 from allmydata.interfaces import IDirectoryNode
+from allmydata.util.assertutil import precondition
 
 from allmydata.util import fake_inotify, fileutil
 from allmydata.util.deferredutil import DeferredListShouldSucceed
@@ -65,7 +66,6 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         fileutil.make_dirs(self.basedir)
         db = self._createdb()
-
 
         relpath1 = u"myFile1"
         pathinfo = fileutil.PathInfo(isdir=False, isfile=True, islink=False,
@@ -411,8 +411,8 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         # Test that temporary files are not uploaded.
         d.addCallback(lambda ign: self._check_file(u"tempfile", "test", temporary=True))
 
-        # Test that we tolerate creation of a subdirectory.
-        d.addCallback(lambda ign: os.mkdir(os.path.join(self.local_dir, u"directory")))
+        # Test creation of a subdirectory.
+        d.addCallback(lambda ign: self._check_mkdir(u"directory"))
 
         # Write something longer, and also try to test a Unicode name if the fs can represent it.
         name_u = self.unicode_or_fallback(u"l\u00F8ng", u"long")
@@ -424,7 +424,12 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         d.addBoth(self.cleanup)
         return d
 
-    def _check_file(self, name_u, data, temporary=False):
+    def _check_mkdir(self, name_u):
+        return self._check_file(name_u + u"/", "", directory=True)
+
+    def _check_file(self, name_u, data, temporary=False, directory=False):
+        precondition(not (temporary and directory), temporary=temporary, directory=directory)
+
         previously_uploaded = self._get_count('uploader.objects_succeeded')
         previously_disappeared = self._get_count('uploader.objects_disappeared')
 
@@ -433,27 +438,34 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         path_u = abspath_expanduser_unicode(name_u, base=self.local_dir)
         path = to_filepath(path_u)
 
-        # We don't use FilePath.setContent() here because it creates a temporary file that
-        # is renamed into place, which causes events that the test is not expecting.
-        f = open(path_u, "wb")
-        try:
-            if temporary and sys.platform != "win32":
+        if directory:
+            os.mkdir(path_u)
+            event_mask = self.inotify.IN_CREATE | self.inotify.IN_ISDIR
+        else:
+            # We don't use FilePath.setContent() here because it creates a temporary file that
+            # is renamed into place, which causes events that the test is not expecting.
+            f = open(path_u, "wb")
+            try:
+                if temporary and sys.platform != "win32":
+                    os.unlink(path_u)
+                f.write(data)
+            finally:
+                f.close()
+            if temporary and sys.platform == "win32":
                 os.unlink(path_u)
-            f.write(data)
-        finally:
-            f.close()
-        if temporary and sys.platform == "win32":
-            os.unlink(path_u)
-            self.notify(path, self.inotify.IN_DELETE)
+                self.notify(path, self.inotify.IN_DELETE)
+            event_mask = self.inotify.IN_CLOSE_WRITE
+
         fileutil.flush_volume(path_u)
-        self.notify(path, self.inotify.IN_CLOSE_WRITE)
+        self.notify(path, event_mask)
+        encoded_name_u = magicpath.path2magic(name_u)
 
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
         if temporary:
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_disappeared'),
                                                                  previously_disappeared + 1))
         else:
-            d.addCallback(lambda ign: self.upload_dirnode.get(name_u))
+            d.addCallback(lambda ign: self.upload_dirnode.get(encoded_name_u))
             d.addCallback(download_to_data)
             d.addCallback(lambda actual_data: self.failUnlessReallyEqual(actual_data, data))
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'),
@@ -485,13 +497,6 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         alice_clock = task.Clock()
         bob_clock = task.Clock()
         d = self.setup_alice_and_bob(alice_clock, bob_clock)
-        def get_results(result):
-            # XXX are these used?
-            (self.alice_collective_dircap, self.alice_upload_dircap, self.alice_magicfolder,
-             self.bob_collective_dircap,   self.bob_upload_dircap,   self.bob_magicfolder) = result
-            #print "Alice magicfolderdb is at %r" % (self.alice_magicfolder._client.basedir)
-            #print "Bob   magicfolderdb is at %r" % (self.bob_magicfolder._client.basedir)
-        d.addCallback(get_results)
 
         def _check_uploader_count(ign, name, expected):
             self.failUnlessReallyEqual(self._get_count('uploader.'+name, client=self.alice_magicfolder._client),
@@ -572,9 +577,10 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         d.addCallback(_check_downloader_count, 'objects_downloaded', 3)
 
         def _cleanup(ign, magicfolder, clock):
-            d2 = magicfolder.finish()
-            clock.advance(0)
-            return d2
+            if magicfolder is not None:
+                d2 = magicfolder.finish()
+                clock.advance(0)
+                return d2
 
         def cleanup_Alice_and_Bob(result):
             print "cleanup alice bob test\n"
