@@ -175,6 +175,11 @@ class MagicFolderCLITestMixin(CLITestMixin, GridTestMixin):
                                                          bob_magic_dir, bob_clock)
             return result
         d.addCallback(get_Bob_magicfolder)
+        def prepare_result(result):
+            # XXX improve this
+            return (self.alice_collective_dircap, self.alice_upload_dircap, self.alice_magicfolder,
+                    self.bob_collective_dircap,   self.bob_upload_dircap,   self.bob_magicfolder)
+        d.addCallback(prepare_result)
         return d
 
 
