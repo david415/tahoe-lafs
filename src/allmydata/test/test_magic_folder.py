@@ -8,7 +8,6 @@ from allmydata.interfaces import IDirectoryNode
 from allmydata.util.assertutil import precondition
 
 from allmydata.util import fake_inotify, fileutil
-from allmydata.util.deferredutil import DeferredListShouldSucceed
 from allmydata.util.encodingutil import get_filesystem_encoding, to_filepath
 from allmydata.util.consumer import download_to_data
 from allmydata.test.no_network import GridTestMixin
@@ -132,13 +131,12 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         def _check_move_empty_tree(res):
             print "_check_move_empty_tree"
-            downloaded_d = self.magicfolder.downloader.set_hook('processed')
             uploaded_d = self.magicfolder.uploader.set_hook('processed')
             self.mkdir_nonascii(empty_tree_dir)
             os.rename(empty_tree_dir, new_empty_tree_dir)
             self.notify(to_filepath(new_empty_tree_dir), self.inotify.IN_MOVED_TO)
 
-            return DeferredListShouldSucceed([downloaded_d, uploaded_d])
+            return uploaded_d
         d.addCallback(_check_move_empty_tree)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 1))
@@ -146,11 +144,8 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 1))
 
-        # FIXME check that Bob downloaded/created the empty tree.
-
         def _check_move_small_tree(res):
             print "_check_move_small_tree"
-            downloaded_d = self.magicfolder.downloader.set_hook('processed', ignore_count=1)
             uploaded_d = self.magicfolder.uploader.set_hook('processed', ignore_count=1)
             self.mkdir_nonascii(small_tree_dir)
             what_path = abspath_expanduser_unicode(u"what", base=small_tree_dir)
@@ -158,7 +153,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             os.rename(small_tree_dir, new_small_tree_dir)
             self.notify(to_filepath(new_small_tree_dir), self.inotify.IN_MOVED_TO)
 
-            return DeferredListShouldSucceed([downloaded_d, uploaded_d])
+            return uploaded_d
         d.addCallback(_check_move_small_tree)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 3))
@@ -168,13 +163,12 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         def _check_moved_tree_is_watched(res):
             print "_check_moved_tree_is_watched"
-            downloaded_d = self.magicfolder.downloader.set_hook('processed', ignore_count=1)
             uploaded_d = self.magicfolder.uploader.set_hook('processed')
             another_path = abspath_expanduser_unicode(u"another", base=new_small_tree_dir)
             fileutil.write(another_path, "file")
             self.notify(to_filepath(another_path), self.inotify.IN_CLOSE_WRITE)
 
-            return DeferredListShouldSucceed([downloaded_d, uploaded_d])
+            return uploaded_d
         d.addCallback(_check_moved_tree_is_watched)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 4))
@@ -598,6 +592,7 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
     def _check_file(self, name_u, data, temporary=False, directory=False):
         precondition(not (temporary and directory), temporary=temporary, directory=directory)
 
+        print "%r._check_file(%r, %r, temporary=%r, directory=%r)" % (self, name_u, data, temporary, directory)
         previously_uploaded = self._get_count('uploader.objects_succeeded')
         previously_disappeared = self._get_count('uploader.objects_disappeared')
 
@@ -632,9 +627,18 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_disappeared'),
                                                                  previously_disappeared + 1))
         else:
+            def _here(res, n):
+                print "here %r %r" % (n, res)
+                return res
+            d.addBoth(_here, 1)
+            d.addCallback(lambda ign: self.upload_dirnode.list())
+            d.addBoth(_here, 1.5)
             d.addCallback(lambda ign: self.upload_dirnode.get(encoded_name_u))
+            d.addBoth(_here, 2)
             d.addCallback(download_to_data)
+            d.addBoth(_here, 3)
             d.addCallback(lambda actual_data: self.failUnlessReallyEqual(actual_data, data))
+            d.addBoth(_here, 4)
             d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'),
                                                                  previously_uploaded + 1))
 
@@ -1023,9 +1027,8 @@ class MockTest(MagicFolderTestMixin, unittest.TestCase):
             self.shouldFail(AssertionError, 'non-directory upload.dircap', 'does not refer to a directory',
                             MagicFolder, client, 'URI:LIT:foo', '', errors_dir, magicfolderdb)
             self.shouldFail(AssertionError, 'readonly upload.dircap', 'is not a writecap to a directory',
-                            MagicFolder, client, readonly_dircap, '', errors_dir, magicfolderdb,)
-            self.shouldFail(AssertionError, 'collective dircap',
-                            "The URI in '%s' is not a readonly cap to a directory." % os.path.join('private', 'collective_dircap'),
+                            MagicFolder, client, readonly_dircap, '', errors_dir, magicfolderdb)
+            self.shouldFail(AssertionError, 'collective dircap', 'is not a readonly cap to a directory',
                             MagicFolder, client, upload_dircap, upload_dircap, errors_dir, magicfolderdb)
 
             def _not_implemented():

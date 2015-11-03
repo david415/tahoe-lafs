@@ -13,7 +13,7 @@ from allmydata.util import fileutil
 from allmydata.interfaces import IDirectoryNode
 from allmydata.util import log
 from allmydata.util.fileutil import precondition_abspath, get_pathinfo, ConflictError
-from allmydata.util.assertutil import precondition
+from allmydata.util.assertutil import precondition, _assert
 from allmydata.util.deferredutil import HookMixin
 from allmydata.util.encodingutil import listdir_filepath, to_filepath, \
      extend_filepath, unicode_from_filepath, unicode_segments_from, \
@@ -46,11 +46,13 @@ class MagicFolder(service.MultiService):
     name = 'magic-folder'
 
     def __init__(self, client, upload_dircap, collective_dircap, local_path_u, dbfile,
-                 pending_delay=1.0, clock=reactor):
+                 pending_delay=1.0, clock=None):
         precondition_abspath(local_path_u)
 
         service.MultiService.__init__(self)
 
+        immediate = clock is not None
+        clock = clock or reactor
         db = magicfolderdb.get_magicfolderdb(dbfile, create_version=(magicfolderdb.SCHEMA_v1, 1))
         if db is None:
             return Failure(Exception('ERROR: Unable to load magic folder db.'))
@@ -59,12 +61,11 @@ class MagicFolder(service.MultiService):
         self._client = client
         self._db = db
 
-        self.is_ready = False
+        upload_dirnode = self._client.create_node_from_uri(upload_dircap)
+        collective_dirnode = self._client.create_node_from_uri(collective_dircap)
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dircap, pending_delay, clock)
-        self.downloader = Downloader(client, local_path_u, db, collective_dircap, clock, self.uploader.is_pending)
-
-        #self.downloader = Downloader(client, local_path_u, db, collective_dircap, clock, lambda x: self.uploader.is_pending(x))
+        self.uploader = Uploader(client, local_path_u, db, upload_dirnode, pending_delay, clock, immediate)
+        self.downloader = Downloader(client, local_path_u, db, collective_dirnode, upload_dirnode.get_readonly_uri(), clock, self.uploader.is_pending)
 
     def startService(self):
         # TODO: why is this being called more than once?
@@ -78,7 +79,6 @@ class MagicFolder(service.MultiService):
         """ready is used to signal us to start
         processing the upload and download items...
         """
-        self.is_ready = True
         d = self.uploader.start_scanning()
         d2 = self.downloader.start_scanning()
         d.addCallback(lambda ign: d2)
@@ -117,11 +117,11 @@ class QueueMixin(HookMixin):
 
         self._deque = deque()
         self._lazy_tail = defer.succeed(None)
-        self._pending = set()
         self._stopped = False
         self._turn_delay = 0
 
     def _get_filepath(self, relpath_u):
+        self._log("_get_filepath(%r)" % (relpath_u,))
         return extend_filepath(self._local_filepath, relpath_u.split(u"/"))
 
     def _get_relpath(self, filepath):
@@ -145,16 +145,6 @@ class QueueMixin(HookMixin):
         print s
         #open("events", "ab+").write(msg)
 
-    def _append_to_deque(self, relpath_u):
-        self._log("_append_to_deque(%r)" % (relpath_u,))
-        if relpath_u in self._pending or magicpath.should_ignore_file(relpath_u):
-            return
-        self._deque.append(relpath_u)
-        self._pending.add(relpath_u)
-        self._count('objects_queued')
-        if self.is_ready:
-            self._clock.callLater(0, self._turn_deque)
-
     def _turn_deque(self):
         self._log("_turn_deque")
         if self._stopped:
@@ -175,27 +165,29 @@ class QueueMixin(HookMixin):
 
 
 class Uploader(QueueMixin):
-    def __init__(self, client, local_path_u, db, upload_dircap, pending_delay, clock):
+    def __init__(self, client, local_path_u, db, upload_dirnode, pending_delay, clock,
+                 immediate=False):
         QueueMixin.__init__(self, client, local_path_u, db, 'uploader', clock)
 
         self.is_ready = False
+        self._immediate = immediate
 
-        # TODO: allow a path rather than a cap URI.
-        self._upload_dirnode = self._client.create_node_from_uri(upload_dircap)
-        if not IDirectoryNode.providedBy(self._upload_dirnode):
+        if not IDirectoryNode.providedBy(upload_dirnode):
             raise AssertionError("The URI in '%s' does not refer to a directory."
                                  % os.path.join('private', 'magic_folder_dircap'))
-        if self._upload_dirnode.is_unknown() or self._upload_dirnode.is_readonly():
+        if upload_dirnode.is_unknown() or upload_dirnode.is_readonly():
             raise AssertionError("The URI in '%s' is not a writecap to a directory."
                                  % os.path.join('private', 'magic_folder_dircap'))
 
+        self._upload_dirnode = upload_dirnode
         self._inotify = get_inotify_module()
         self._notifier = self._inotify.INotify()
+        self._pending = set()
 
         if hasattr(self._notifier, 'set_pending_delay'):
             self._notifier.set_pending_delay(pending_delay)
 
-        # TODO: what about IN_MOVE_SELF, IN_MOVED_FROM, or IN_UNMOUNT?
+        # TODO: what about IN_MOVE_SELF and IN_UNMOUNT?
         #
         self.mask = ( self._inotify.IN_CREATE
                     | self._inotify.IN_CLOSE_WRITE
@@ -256,7 +248,7 @@ class Uploader(QueueMixin):
 
         d = defer.succeed(None)
         for child in children:
-            assert isinstance(child, unicode), child
+            _assert(isinstance(child, unicode), child=child)
             d.addCallback(lambda ign, child=child:
                           ("%s/%s" % (reldir_u, child) if reldir_u else child))
             def _add_pending(relpath_u):
@@ -281,6 +273,7 @@ class Uploader(QueueMixin):
 
     def _notify(self, opaque, path, events_mask):
         self._log("inotify event %r, %r, %r\n" % (opaque, path, ', '.join(self._inotify.humanReadableMask(events_mask))))
+        relpath_u = self._get_relpath(path)
 
         # We filter out IN_CREATE events not associated with a directory.
         # Acting on IN_CREATE for files could cause us to read and upload
@@ -291,20 +284,35 @@ class Uploader(QueueMixin):
 
         if ((events_mask & self._inotify.IN_CREATE) != 0 and
             (events_mask & self._inotify.IN_ISDIR) == 0):
-            self._log("ignoring inotify event for creation of file %r\n" % (path,))
+            self._log("ignoring event for %r (creation of non-directory)\n" % (relpath_u,))
+            return
+        if relpath_u in self._pending:
+            self._log("ignoring event for %r (already pending)" % (relpath_u,))
+            return
+        if magicpath.should_ignore_file(relpath_u):
+            self._log("ignoring event for %r (ignorable path)" % (relpath_u,))
             return
 
-        relpath_u = self._get_relpath(path)
-        self._append_to_deque(relpath_u)
+        self._log("appending %r to deque" % (relpath_u,))
+        self._deque.append(relpath_u)
+        self._pending.add(relpath_u)
+        self._count('objects_queued')
+        if self.is_ready:
+            if self._immediate:  # for tests
+                self._turn_deque()
+            else:
+                self._clock.callLater(0, self._turn_deque)
 
     def _when_queue_is_empty(self):
         return defer.succeed(None)
 
     def _process(self, relpath_u):
+        # Uploader
         self._log("_process(%r)" % (relpath_u,))
         if relpath_u is None:
             return
         precondition(isinstance(relpath_u, unicode), relpath_u)
+        precondition(not relpath_u.endswith(u'/'), relpath_u)
 
         d = defer.succeed(None)
 
@@ -314,7 +322,8 @@ class Uploader(QueueMixin):
             fp = self._get_filepath(relpath_u)
             pathinfo = get_pathinfo(unicode_from_filepath(fp))
 
-            self._log("pending = %r, about to remove %r" % (self._pending, relpath_u))
+            self._log("about to remove %r from pending set %r" %
+                      (relpath_u, self._pending))
             self._pending.remove(relpath_u)
             encoded_path_u = magicpath.path2magic(relpath_u)
 
@@ -359,9 +368,12 @@ class Uploader(QueueMixin):
                 self.warn("WARNING: cannot upload symlink %s" % quote_filepath(fp))
                 return None
             elif pathinfo.isdir:
-                self._notifier.watch(fp, mask=self.mask, callbacks=[self._notify], recursive=True)
+                if not getattr(self._notifier, 'recursive_includes_new_subdirectories', False):
+                    self._notifier.watch(fp, mask=self.mask, callbacks=[self._notify], recursive=True)
+
                 uploadable = Data("", self._client.convergence)
                 encoded_path_u += magicpath.path2magic(u"/")
+                self._log("encoded_path_u =  %r" % (encoded_path_u,))
                 upload_d = self._upload_dirnode.add_file(encoded_path_u, uploadable, metadata={"version":0}, overwrite=True)
                 def _succeeded(ign):
                     self._log("created subdirectory %r" % (relpath_u,))
@@ -415,7 +427,7 @@ class Uploader(QueueMixin):
             return res
         def _failed(f):
             self._count('objects_failed')
-            self._log("%r while processing %r" % (f, relpath_u))
+            self._log("%s while processing %r" % (f, relpath_u))
             return f
         d.addCallbacks(_succeeded, _failed)
         return d
@@ -504,23 +516,22 @@ class WriteFileMixin(object):
 class Downloader(QueueMixin, WriteFileMixin):
     REMOTE_SCAN_INTERVAL = 3  # facilitates tests
 
-    def __init__(self, client, local_path_u, db, collective_dircap, clock, is_upload_pending):
+    def __init__(self, client, local_path_u, db, collective_dirnode, upload_readonly_dircap, clock, is_upload_pending):
         QueueMixin.__init__(self, client, local_path_u, db, 'downloader', clock)
 
         self._is_upload_pending = is_upload_pending
-
-        # TODO: allow a path rather than a cap URI.
-        self._collective_dirnode = self._client.create_node_from_uri(collective_dircap)
-
-        if not IDirectoryNode.providedBy(self._collective_dirnode):
+        
+        if not IDirectoryNode.providedBy(collective_dirnode):
             raise AssertionError("The URI in '%s' does not refer to a directory."
                                  % os.path.join('private', 'collective_dircap'))
-        if self._collective_dirnode.is_unknown() or not self._collective_dirnode.is_readonly():
+        if collective_dirnode.is_unknown() or not collective_dirnode.is_readonly():
             raise AssertionError("The URI in '%s' is not a readonly cap to a directory."
                                  % os.path.join('private', 'collective_dircap'))
 
+        self._collective_dirnode = collective_dirnode
+        self._upload_readonly_dircap = upload_readonly_dircap
+
         self._turn_delay = self.REMOTE_SCAN_INTERVAL
-        self._download_scan_batch = {} # path -> [(filenode, metadata)]
 
     def start_scanning(self):
         self._log("start_scanning")
@@ -528,6 +539,7 @@ class Downloader(QueueMixin, WriteFileMixin):
         self._log("all files %s" % files)
 
         d = self._scan_remote_collective()
+        d.addBoth(self._logcb, "after _scan_remote_collective 0")
         self._turn_deque()
         return d
 
@@ -596,14 +608,8 @@ class Downloader(QueueMixin, WriteFileMixin):
         collective_dirmap_d.addCallback(highest_version)
         return collective_dirmap_d
 
-    def _append_to_batch(self, name, file_node, metadata):
-        if self._download_scan_batch.has_key(name):
-            self._download_scan_batch[name] += [(file_node, metadata)]
-        else:
-            self._download_scan_batch[name] = [(file_node, metadata)]
-
-    def _scan_remote(self, nickname, dirnode):
-        self._log("_scan_remote nickname %r" % (nickname,))
+    def _scan_remote_dmd(self, nickname, dirnode, scan_batch):
+        self._log("_scan_remote_dmd nickname %r" % (nickname,))
         d = dirnode.list()
         def scan_listing(listing_map):
             for encoded_relpath_u in listing_map.keys():
@@ -614,68 +620,62 @@ class Downloader(QueueMixin, WriteFileMixin):
                 local_version = self._get_local_latest(relpath_u)
                 remote_version = metadata.get('version', None)
                 self._log("%r has local version %r, remote version %r" % (relpath_u, local_version, remote_version))
+
                 if local_version is None or remote_version is None or local_version < remote_version:
                     self._log("%r added to download queue" % (relpath_u,))
-                    self._append_to_batch(relpath_u, file_node, metadata)
+                    if scan_batch.has_key(relpath_u):
+                        scan_batch[relpath_u] += [(file_node, metadata)]
+                    else:
+                        scan_batch[relpath_u] = [(file_node, metadata)]
+
         d.addCallback(scan_listing)
-        d.addBoth(self._logcb, "end of _scan_remote")
+        d.addBoth(self._logcb, "end of _scan_remote_dmd")
         return d
 
     def _scan_remote_collective(self):
         self._log("_scan_remote_collective")
-        self._download_scan_batch = {} # XXX
+        scan_batch = {}  # path -> [(filenode, metadata)]
 
-        if self._collective_dirnode is None:
-            return
-        collective_dirmap_d = self._collective_dirnode.list()
-        def do_list(result):
-            others = [x for x in result.keys()]
-            return result, others
-        collective_dirmap_d.addCallback(do_list)
-        def scan_collective(result):
-            d = defer.succeed(None)
-            collective_dirmap, others_list = result
-            for dir_name in others_list:
-                d.addCallback(lambda x, dir_name=dir_name: self._scan_remote(dir_name, collective_dirmap[dir_name][0]))
-                # XXX todo add errback
-            return d
-        collective_dirmap_d.addCallback(scan_collective)
-        collective_dirmap_d.addCallback(self._filter_scan_batch)
-        collective_dirmap_d.addCallback(self._add_batch_to_download_queue)
-        return collective_dirmap_d
+        d = self._collective_dirnode.list()
+        def scan_collective(dirmap):
+            d2 = defer.succeed(None)
+            for dir_name in dirmap:
+                (dirnode, metadata) = dirmap[dir_name]
+                if dirnode.get_readonly_uri() != self._upload_readonly_dircap:
+                    d2.addCallback(lambda ign, dir_name=dir_name, dirnode=dirnode:
+                                   self._scan_remote_dmd(dir_name, dirnode, scan_batch))
+                    def _err(f, dir_name=dir_name):
+                        self._log("failed to scan DMD for client %r: %s" % (dir_name, f))
+                        # XXX what should we do to make this failure more visible to users?
+                    d2.addErrback(_err)
 
-    def _add_batch_to_download_queue(self, result):
-        self._log("result = %r" % (result,))
-        self._log("deque = %r" % (self._deque,))
-        self._deque.extend(result)
-        self._log("deque after = %r" % (self._deque,))
-        self._count('objects_queued', len(result))
-        self._log("pending = %r" % (self._pending,))
-        self._pending.update(map(lambda x: x[0], result))
-        self._log("pending after = %r" % (self._pending,))
+            return d2
+        d.addCallback(scan_collective)
 
-    def _filter_scan_batch(self, result):
-        self._log("_filter_scan_batch")
-        extension = [] # consider whether this should be a dict
-        for relpath_u in self._download_scan_batch.keys():
-            if relpath_u in self._pending:
-                continue
-            file_node, metadata = max(self._download_scan_batch[relpath_u], key=lambda x: x[1]['version'])
-            if self._should_download(relpath_u, metadata['version']):
-                extension += [(relpath_u, file_node, metadata)]
-            else:
-                self._log("Excluding %r" % (relpath_u,))
-                self._count('objects_excluded')
-                self._call_hook(None, 'processed')
-        return extension
+        def _filter_batch_to_deque(ign):
+            self._log("deque = %r, scan_batch = %r" % (self._deque, scan_batch))
+            for relpath_u in scan_batch.keys():
+                file_node, metadata = max(scan_batch[relpath_u], key=lambda x: x[1]['version'])
+
+                if self._should_download(relpath_u, metadata['version']):
+                    self._deque.append( (relpath_u, file_node, metadata) )
+                else:
+                    self._log("Excluding %r" % (relpath_u,))
+                    self._count('objects_excluded')
+                    self._call_hook(None, 'processed')
+
+            self._log("deque after = %r" % (self._deque,))
+        d.addCallback(_filter_batch_to_deque)
+        return d
 
     def _when_queue_is_empty(self):
         d = task.deferLater(self._clock, self._turn_delay, self._scan_remote_collective)
-        d.addBoth(self._logcb, "after _scan_remote_collective")
+        d.addBoth(self._logcb, "after _scan_remote_collective 1")
         d.addCallback(lambda ign: self._turn_deque())
         return d
 
     def _process(self, item, now=None):
+        # Downloader
         self._log("_process(%r)" % (item,))
         if now is None:
             now = time.time()
@@ -683,6 +683,7 @@ class Downloader(QueueMixin, WriteFileMixin):
         fp = self._get_filepath(relpath_u)
         abspath_u = unicode_from_filepath(fp)
         conflict_path_u = self._get_conflicted_filename(abspath_u)
+
         d = defer.succeed(None)
 
         def do_update_db(written_abspath_u):
@@ -722,6 +723,7 @@ class Downloader(QueueMixin, WriteFileMixin):
                     dmd_last_uploaded_uri = metadata.get('last_uploaded_uri', None)
                     print ">>>>  if %r != %r" % (dmd_last_uploaded_uri, db_entry.last_uploaded_uri)
                     if dmd_last_uploaded_uri is not None and dmd_last_uploaded_uri != db_entry.last_uploaded_uri:
+                    #if dmd_last_uploaded_uri != db_entry.last_uploaded_uri:
                         is_conflict = True
                         self._count('objects_conflicted')
                     else:
@@ -747,10 +749,6 @@ class Downloader(QueueMixin, WriteFileMixin):
 
         d.addCallbacks(do_update_db, failed)
 
-        def remove_from_pending(res):
-            self._pending.remove(relpath_u)
-            return res
-        d.addBoth(remove_from_pending)
         def trap_conflicts(f):
             f.trap(ConflictError)
             return None

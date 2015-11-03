@@ -41,11 +41,12 @@ Configuration
 The Magic Folder frontend runs as part of a gateway node. To set it up, you
 must use the tahoe magic-folder CLI. For detailed information see our
 `Magic-Folder CLI design documentation`_. For a given Magic-Folder collective
-directory you need to run the ``tahoe magic-folder create`` command. After that
-the ``tahoe magic-folder invite`` command must used to generate an invite code for
-each member of the magic-folder collective. A confidential, authenticated communications
-channel should be used to transmit the invite code to each member, who will be joining
-using the ``tahoe magic-folder join`` command.
+directory you need to run the ``tahoe magic-folder create`` command. After
+that the ``tahoe magic-folder invite`` command must used to generate an
+*invite code* for each member of the magic-folder collective. A confidential,
+authenticated communications channel should be used to transmit the invite code
+to each member, who will be joining using the ``tahoe magic-folder join``
+command.
 
 These settings are persisted in the ``[magic_folder]`` section of the
 gateway's ``tahoe.cfg`` file.
@@ -64,18 +65,14 @@ gateway's ``tahoe.cfg`` file.
     in UTF-8 regardless of the system's filesystem encoding. Relative paths
     will be interpreted starting from the node's base directory.
 
-In addition:
- * the file ``private/magic_folder_dircap`` must contain a writecap pointing
-   to an existing mutable directory to be used as the target of uploads.
-   It will start with ``URI:DIR2:``, and cannot include an alias or path.
- * the file ``private/collective_dircap`` must contain a readcap
+You should not normally need to set these fields manually because they are
+set by the ``tahoe magic-folder create`` and/or ``tahoe magic-folder join``
+commands. Use the ``--help`` option to these commands for more information.
 
-After setting the above fields and starting or restarting the gateway,
-you can confirm that the feature is working by copying a file into the
-local directory. Then, use the WUI or CLI to check that it has appeared
-in the upload directory with the same filename. A large file may take some
-time to appear, since it is only linked into the directory after the upload
-has completed.
+After setting up a Magic Folder collective and starting or restarting each
+gateway, you can confirm that the feature is working by copying a file into
+any local directory, and checking that it appears on other clients.
+Large files may take some time to appear.
 
 The 'Operational Statistics' page linked from the Welcome page shows
 counts of the number of files uploaded, the number of change events currently
@@ -88,7 +85,7 @@ page and the node log_ may be helpful to determine the cause of any failures.
 Known Issues and Limitations
 ============================
 
-This frontend only works on Linux and Windows. There is a ticket to add
+This feature only works on Linux and Windows. There is a ticket to add
 support for Mac OS X and BSD-based systems (`#1432`_).
 
 The only way to determine whether uploads have failed is to look at the
@@ -123,11 +120,10 @@ The ``private/magic_folder_dircap`` and ``private/collective_dircap`` files
 cannot use an alias or path to specify the upload directory. (`#1711`_)
 
 If a file in the upload directory is changed (actually relinked to a new
-file), then the old file is still present on the grid, and any other caps to
-it will remain valid. See `docs/garbage-collection.rst`_ for how to reclaim
-the space used by files that are no longer needed. Garbage collection is
-not included as part of the OTF Magic-Folder grant... however we've documented
-this feature here `#2440`_
+file), then the old file is still present on the grid, and any other caps
+to it will remain valid. Eventually it will be possible to use
+`garbage collection`_ to reclaim the space used by these files; however
+currently they are retained indefinitely. (`#2440`_)
 
 Unicode filenames are supported on both Linux and Windows, but on Linux, the
 local name of a file must be encoded correctly in order for it to be uploaded.
@@ -149,5 +145,5 @@ On Windows, when a node has Magic Folder enabled, it is unresponsive to Ctrl-C
 .. _`#2219`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/2219
 .. _`#2440`: https://tahoe-lafs.org/trac/tahoe-lafs/ticket/2440
 
-.. _docs/garbage-collection.rst: ../garbage-collection.rst
+.. _`garbage collection`: ../garbage-collection.rst
 .. _`Magic-Folder CLI design documentation`: ../proposed/magic-folder/user-interface-design.rst

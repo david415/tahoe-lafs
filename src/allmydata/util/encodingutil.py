@@ -274,10 +274,17 @@ def extend_filepath(fp, segments):
         return fp
 
 def to_filepath(path):
-    precondition(isinstance(path, basestring), path=path)
+    precondition(isinstance(path, unicode if use_unicode_filepath else basestring),
+                 path=path)
 
     if isinstance(path, unicode) and not use_unicode_filepath:
         path = path.encode(filesystem_encoding)
+
+    if sys.platform == "win32":
+        _assert(isinstance(path, unicode), path=path)
+        if path.startswith(u"\\\\?\\") and len(path) > 4:
+            # FilePath normally strips trailing path separators, but not in this case.
+            path = path.rstrip(u"\\")
 
     return FilePath(path)
 
@@ -297,12 +304,7 @@ def unicode_segments_from(base_fp, ancestor_fp):
     precondition(isinstance(base_fp, FilePath), base_fp=base_fp)
     precondition(isinstance(ancestor_fp, FilePath), ancestor_fp=ancestor_fp)
 
-    if hasattr(FilePath, 'asTextMode'):
-        return base_fp.asTextMode().segmentsFrom(ancestor_fp.asTextMode())
-    else:
-        bpt, apt = (type(base_fp.path), type(ancestor_fp.path))
-        _assert(bpt == apt, bpt=bpt, apt=apt)
-        return map(_decode, base_fp.segmentsFrom(ancestor_fp))
+    return base_fp.asTextMode().segmentsFrom(ancestor_fp.asTextMode())
 
 def unicode_platform():
     """
