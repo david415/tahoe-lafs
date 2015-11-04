@@ -357,8 +357,9 @@ class Uploader(QueueMixin):
                 metadata = { 'version': new_version,
                              'deleted': True,
                              'last_downloaded_timestamp': last_downloaded_timestamp }
-                if db_entry.last_downloaded_uri is not None:
-                    metadata['last_downloaded_uri'] = db_entry.last_downloaded_uri
+
+                if db_entry is not None and db_entry.last_uploaded_uri is not None:
+                    metadata['last_downloaded_uri'] = db_entry.last_uploaded_uri
 
                 empty_uploadable = Data("", self._client.convergence)
                 d2 = self._upload_dirnode.add_file(encoded_path_u, empty_uploadable,
@@ -395,9 +396,7 @@ class Uploader(QueueMixin):
                 return upload_d
             elif pathinfo.isfile:
                 db_entry = self._db.get_db_entry(relpath_u)
-
                 last_downloaded_timestamp = now
-
                 if db_entry is None:
                     new_version = 0
                 elif is_new_file(pathinfo, db_entry):
@@ -409,8 +408,8 @@ class Uploader(QueueMixin):
 
                 metadata = { 'version': new_version,
                              'last_downloaded_timestamp': last_downloaded_timestamp }
-                if db_entry is not None and db_entry.last_downloaded_uri is not None:
-                    metadata['last_downloaded_uri'] = db_entry.last_downloaded_uri
+                if db_entry is not None and db_entry.last_uploaded_uri is not None:
+                    metadata['last_downloaded_uri'] = db_entry.last_uploaded_uri
 
                 uploadable = FileName(unicode_from_filepath(fp), self._client.convergence)
                 d2 = self._upload_dirnode.add_file(encoded_path_u, uploadable,
@@ -696,16 +695,17 @@ class Downloader(QueueMixin, WriteFileMixin):
 
         def do_update_db(written_abspath_u):
             filecap = file_node.get_uri()
-            last_uploaded_uri = metadata.get('last_uploaded_uri', None)
             last_downloaded_uri = filecap
             last_downloaded_timestamp = now
+            last_uploaded_uri = metadata.get('last_uploaded_uri', None)
+
             written_pathinfo = get_pathinfo(written_abspath_u)
 
             if not written_pathinfo.exists and not metadata.get('deleted', False):
                 raise Exception("downloaded object %s disappeared" % quote_local_unicode_path(written_abspath_u))
 
-            self._db.did_upload_version(relpath_u, metadata['version'], last_uploaded_uri,
-                                        last_downloaded_uri, last_downloaded_timestamp, written_pathinfo)
+            self._db.did_upload_version(relpath_u, metadata['version'], filecap,
+                                        last_uploaded_uri, last_downloaded_timestamp, written_pathinfo)
             self._count('objects_downloaded')
         def failed(f):
             self._log("download failed: %s" % (str(f),))
@@ -718,20 +718,33 @@ class Downloader(QueueMixin, WriteFileMixin):
             d.addCallback(fail)
         else:
             pathinfo = get_pathinfo(abspath_u)
-
             db_entry = self._db.get_db_entry(relpath_u)
             dmd_last_downloaded_uri = metadata.get('last_downloaded_uri', None)
 
             # See <docs/proposed/magic-folder/remote-to-local-sync.rst#conflictoverwrite-decision-algorithm>.
-            is_conflict_2a     = not pathinfo.exists
+            #iii. either dmd_last_downloaded_uri or db_entry.last_uploaded_uri (or both) are absent, or they are different.
+            print "metadata %r" % (metadata,)
+            is_conflict_2a = False
+            if metadata['version'] != 0:
+                if 'deleted' in metadata.keys():
+                    if not pathinfo.exists:
+                        is_conflict_2a = True
+                else:
+                    if db_entry is None:
+                        is_conflict_2a = True
+
             is_conflict_2c_i   = self._is_upload_pending(relpath_u)
-            is_conflict_2c_ii  = db_entry is None or is_new_file(pathinfo, db_entry)
-            is_conflict_2c_iii = (dmd_last_downloaded_uri is None or db_entry is None or db_entry.last_uploaded_uri is None
-                                  or dmd_last_downloaded_uri != db_entry.last_uploaded_uri)
+            if metadata['version'] == 0:
+                is_conflict_2c_ii  = False
+                is_conflict_2c_iii = False
+            else:
+                is_conflict_2c_ii  = db_entry is None or is_new_file(pathinfo, db_entry)
+                is_conflict_2c_iii = (dmd_last_downloaded_uri is None or db_entry is None or db_entry.last_uploaded_uri is None
+                                      or dmd_last_downloaded_uri != db_entry.last_uploaded_uri)
 
             print "conflict?", is_conflict_2a, is_conflict_2c_i, is_conflict_2c_ii, is_conflict_2c_iii
-
             is_conflict = is_conflict_2a or is_conflict_2c_i or is_conflict_2c_ii or is_conflict_2c_iii
+
             if is_conflict:
                 self._count('objects_conflicted')
 
