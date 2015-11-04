@@ -400,6 +400,8 @@ class Uploader(QueueMixin):
                              'last_downloaded_timestamp': last_downloaded_timestamp }
                 if db_entry is not None and db_entry.last_downloaded_uri is not None:
                     metadata['last_downloaded_uri'] = db_entry.last_downloaded_uri
+                #if db_entry is not None and db_entry.last_uploaded_uri is not None:
+                #    metadata['last_uploaded_uri'] = db_entry.last_uploaded_uri
 
                 uploadable = FileName(unicode_from_filepath(fp), self._client.convergence)
                 d2 = self._upload_dirnode.add_file(encoded_path_u, uploadable,
@@ -706,21 +708,40 @@ class Downloader(QueueMixin, WriteFileMixin):
                 raise ConflictError("download failed: already conflicted: %r" % (relpath_u,))
             d.addCallback(fail)
         else:
-            is_conflict = False
-            db_entry = self._db.get_db_entry(relpath_u)
             dmd_last_downloaded_uri = metadata.get('last_downloaded_uri', None)
             dmd_last_uploaded_uri = metadata.get('last_uploaded_uri', None)
-            if db_entry:
+            db_entry = self._db.get_db_entry(relpath_u)
+
+            def is_remote_conflict():
+                """
+                returns true if a conflict is detected
+                """
+                if self._is_upload_pending(relpath_u):
+                    print "MEOW 0"
+                    self._count('objects_conflicted')
+                    return True
+
+                if not db_entry:
+                    return False
+
                 if dmd_last_downloaded_uri is not None and db_entry.last_downloaded_uri is not None:
                     if dmd_last_downloaded_uri != db_entry.last_downloaded_uri:
-                        is_conflict = True
+                        print "MEOW 1"
                         self._count('objects_conflicted')
-                elif dmd_last_uploaded_uri is not None and dmd_last_uploaded_uri != db_entry.last_uploaded_uri:
-                    is_conflict = True
-                    self._count('objects_conflicted')
-                elif self._is_upload_pending(relpath_u):
-                    is_conflict = True
-                    self._count('objects_conflicted')
+                        return True
+
+                if dmd_last_uploaded_uri is not None and db_entry.last_uploaded_uri is not None:
+                    if dmd_last_uploaded_uri != db_entry.last_uploaded_uri:
+                        print "MEOW 2"
+                        self._count('objects_conflicted')
+                        return True
+
+            print "before conflict detection"
+            print "--------------------------------------------"
+            print "dmd_last_downloaded_uri %r dmd_last_uploaded_uri %r" % (dmd_last_downloaded_uri, dmd_last_uploaded_uri)
+            if db_entry:
+                print "db last_downloaded_uri %r db last_uploaded_uri %r" % (db_entry.last_downloaded_uri, db_entry.last_uploaded_uri)
+            is_conflict = is_remote_conflict()
 
             if relpath_u.endswith(u"/"):
                 if metadata.get('deleted', False):
