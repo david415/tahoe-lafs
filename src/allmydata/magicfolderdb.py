@@ -11,17 +11,27 @@ CREATE TABLE version
  version INTEGER  -- contains one row, set to 1
 );
 
+CREATE TABLE parents
+(
+ child_uri                      VARCHAR(91) PRIMARY KEY, -- URI:DIR2-CHK:
+ parent_uri                     VARCHAR(91),             -- URI:DIR2-CHK:
+);
+
+CREATE TABLE snapshots
+(
+ uri                     VARCHAR(91) PRIMARY KEY, -- URI:DIR2-CHK:
+ content_uri             VARCHAR(91),             -- URI:CHK:
+ mtime                   NUMBER,                  -- ST_MTIME
+ ctime                   NUMBER,                  -- ST_CTIME
+);
+
 CREATE TABLE local_files
 (
- path                VARCHAR(1024) PRIMARY KEY, -- UTF-8 filename relative to local magic folder dir
- -- note that size is before mtime and ctime here, but after in function parameters
- size                INTEGER,                   -- ST_SIZE, or NULL if the file has been deleted
- mtime               NUMBER,                      -- ST_MTIME
- ctime               NUMBER,                      -- ST_CTIME
- version             INTEGER,
- last_uploaded_uri   VARCHAR(256) UNIQUE,       -- URI:CHK:...
- last_downloaded_uri VARCHAR(256) UNIQUE,       -- URI:CHK:...
- last_downloaded_timestamp TIMESTAMP
+ path                   VARCHAR(1024) PRIMARY KEY, -- UTF-8 filename relative to local magic folder dir
+ size                   INTEGER,                   -- ST_SIZE, or NULL if the file has been deleted
+ mtime                  NUMBER,                    -- ST_MTIME
+ ctime                  NUMBER,                    -- ST_CTIME
+ current_snapshot_uri   VARCHAR(256) UNIQUE,       -- URI:DIR2-CHK:
 );
 """
 
