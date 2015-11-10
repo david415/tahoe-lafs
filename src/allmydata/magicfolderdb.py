@@ -15,6 +15,7 @@ CREATE TABLE parents
 (
  child_uri                      VARCHAR(91) PRIMARY KEY, -- URI:DIR2-CHK:
  parent_uri                     VARCHAR(91),             -- URI:DIR2-CHK:
+ unique(child_uri, parent_uri),
 );
 
 CREATE TABLE snapshots
@@ -61,7 +62,7 @@ class MagicFolderDB(object):
         self.connection = connection
         self.cursor = connection.cursor()
 
-    def check_file_db_exists(self, path):
+    def check_file_db_exists(self, relpath_u):
         """I will tell you if a given file has an entry in my database or not
         by returning True or False.
         """
@@ -85,53 +86,6 @@ class MagicFolderDB(object):
         rows = self.cursor.fetchall()
         return set([r[0] for r in rows])
 
-    def get_last_downloaded_uri(self, relpath_u):
-        """
-        Return the last downloaded uri recorded in the magic folder db.
-        If none are found then return None.
-        """
-        c = self.cursor
-        c.execute("SELECT last_downloaded_uri"
-                  " FROM local_files"
-                  " WHERE path=?",
-                  (relpath_u,))
-        row = self.cursor.fetchone()
-        if not row:
-            return None
-        else:
-            return row[0]
-
-    def get_local_file_version(self, relpath_u):
-        """
-        Return the version of a local file tracked by our magic folder db.
-        If no db entry is found then return None.
-        """
-        c = self.cursor
-        c.execute("SELECT version"
-                  " FROM local_files"
-                  " WHERE path=?",
-                  (relpath_u,))
-        row = self.cursor.fetchone()
-        if not row:
-            return None
-        else:
-            return row[0]
-
-    def did_upload_version(self, relpath_u, version, last_uploaded_uri, last_downloaded_uri, last_downloaded_timestamp, pathinfo):
-        print "%r.did_upload_version(%r, %r, %r, %r, %r, %r)" % (self, relpath_u, version, last_uploaded_uri, last_downloaded_uri, last_downloaded_timestamp, pathinfo)
-        try:
-            print "insert"
-            self.cursor.execute("INSERT INTO local_files VALUES (?,?,?,?,?,?,?,?)",
-                                (relpath_u, pathinfo.size, pathinfo.mtime, pathinfo.ctime, version, last_uploaded_uri, last_downloaded_uri, last_downloaded_timestamp))
-        except (self.sqlite_module.IntegrityError, self.sqlite_module.OperationalError):
-            print "err... update"
-            self.cursor.execute("UPDATE local_files"
-                                " SET size=?, mtime=?, ctime=?, version=?, last_uploaded_uri=?, last_downloaded_uri=?, last_downloaded_timestamp=?"
-                                " WHERE path=?",
-                                (pathinfo.size, pathinfo.mtime, pathinfo.ctime, version, last_uploaded_uri, last_downloaded_uri, last_downloaded_timestamp, relpath_u))
-        self.connection.commit()
-        print "committed"
-
     def is_new_file(self, pathinfo, relpath_u):
         """
         Returns true if the file's current pathinfo (size, mtime, and ctime) has
@@ -148,3 +102,38 @@ class MagicFolderDB(object):
         if not pathinfo.exists and row[0] is None:
             return False
         return (pathinfo.size, pathinfo.mtime, pathinfo.ctime) != row
+
+    def put_parent(self, child_uri, parent_uri):
+        """
+        Put a parents table entry into the db.
+        """
+
+    def put_snapshot(self, snapshot_uri, content_uri, parents):
+        """
+        Given the snapshot fields: snapshot URI, content URI and list of parent URIs
+        persist to db.
+        """
+
+    def get_snapshot(self, uri):
+        """
+        Given a snapshot URI, retreive a snapshot object
+        consisting of a dictionary with the following keys:
+           - content: a URI string; empty string if deletion.
+           - parents: a list of URI strings; empty list if no parents.
+        Returns None if URI is not in the db.
+        """
+        c = self.cursor
+        c.execute("SELECT content_uri, mtime, ctime FROM snapshots WHERE uri=?", (uri,))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        content_uri, mtime, ctime = row[0]
+        c.execute("SELECT parent_uri from parents where child_uri=?", (uri,))
+        parents = self.cursor.fetchall()
+        snapshot = {
+            "content": content_uri,
+            "mtime": mtime,
+            "ctime": ctime,
+            "parents": parents
+        }
+        return snapshot
