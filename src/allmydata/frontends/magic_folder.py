@@ -41,6 +41,74 @@ def get_inotify_module():
                                       "Windows support requires at least Vista, and has only been tested on Windows 7.")
         raise
 
+class Snapshot(object):
+    """
+    Represents a historical snapshot of a single file that is a
+    descendent of one or more parents. If content is None then
+    the snapshot is a "deletion snapshot". The first-time snapshot
+    of a file will not have any parents.
+    """
+
+    def __init__(self, content, parents):
+        """
+        content: the file-contents of the snapshot.
+        parents: a list of parent snapshot URI strings
+        """
+        self.content = content
+        self.parents = parents
+
+        self.id = None
+        self.content_uri = None
+        self.content_filenode = None
+
+    def create(self, client):
+        """
+        Given a client, we upload an immutable snapshot object
+        which is represented using an immutable directory.
+        """
+        d = self.client.upload(Data(self.content, client.convergence))
+        def _after_upload(result):
+            self.content_uri = result.get_uri()
+            # XXX create_node_from_uri returns an opaque node if there were any problems.
+            # TODO: check for this condition?
+            self.content_filenode = self.client.create_node_from_uri(result.get_uri())
+            return None
+        d.addCallback(_after_upload)
+        def _content_fail(f):
+            print "we failed to upload the content"
+            return f
+        d.addErrback(_content_fail)
+        def _compose_snapshot(ignore):
+            children = {"content": (self.content_filenode, {})}
+            for i, parent in enumerate(self.parents):
+                children["parent" + str(i)] = (self.client.create_node_from_uri(parent), {})
+            d2 = client.create_immutable_dirnode(children)
+            return d2
+        d.addCallback(_compose_snapshot)
+        def _snapshot_fail(f):
+            print "failed to create snapshot immutable dir cap"
+            return f
+        d.addErrback(_snapshot_fail)
+        def _after_snapshot(node):
+            self.id = node.get_uri()
+        d.addCallback(_after_snapshot)
+        return d
+
+    def serialized(self):
+        """
+        Return a serialized snapshot.
+        """
+        snapshot = {
+            "content": self.content_uri,
+            "parents": self.parents,
+        }
+        return snapshot
+
+    def local_persist(self, db):
+        """
+        Locally persist this snapshot to db
+        """
+        # XXX ...
 
 class MagicFolder(service.MultiService):
     name = 'magic-folder'
