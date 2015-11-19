@@ -289,7 +289,8 @@ def status(options):
                         )
                     else:
                         time_left = None
-                        prog = '%2.1f%% done' % (item['percent_done'],)
+                        #prog = '%2.1f%% done' % (item['percent_done'],)
+                        prog = "rate of zero"
                 else:
                     prog = 'just started'
             else:
