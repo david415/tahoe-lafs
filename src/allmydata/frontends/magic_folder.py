@@ -2,7 +2,6 @@
 import sys, os
 import os.path
 from collections import deque
-import time
 
 from twisted.internet import defer, reactor, task
 from twisted.python.failure import Failure
@@ -327,7 +326,7 @@ class Uploader(QueueMixin):
 
         def _maybe_upload(val, now=None):
             if now is None:
-                now = time.time()
+                now = self._clock.seconds()
             fp = self._get_filepath(relpath_u)
             pathinfo = get_pathinfo(unicode_from_filepath(fp))
 
@@ -462,7 +461,8 @@ class WriteFileMixin(object):
     def _get_conflicted_filename(self, abspath_u):
         return abspath_u + u".conflict"
 
-    def _write_downloaded_file(self, abspath_u, file_contents, is_conflict=False, now=None):
+    def _write_downloaded_file(self, abspath_u, file_contents, clock, is_conflict=False):
+        now = clock.seconds()
         self._log("_write_downloaded_file(%r, <%d bytes>, is_conflict=%r, now=%r)"
                   % (abspath_u, len(file_contents), is_conflict, now))
 
@@ -479,8 +479,6 @@ class WriteFileMixin(object):
         precondition_abspath(abspath_u)
         replacement_path_u = abspath_u + u".tmp"  # FIXME more unique
         backup_path_u = abspath_u + u".backup"
-        if now is None:
-            now = time.time()
 
         # ensure parent directory exists
         head, tail = os.path.split(abspath_u)
@@ -686,7 +684,7 @@ class Downloader(QueueMixin, WriteFileMixin):
         # Downloader
         self._log("_process(%r)" % (item,))
         if now is None:
-            now = time.time()
+            now = self._clock.seconds()
         (relpath_u, file_node, metadata) = item
         fp = self._get_filepath(relpath_u)
         abspath_u = unicode_from_filepath(fp)
@@ -745,7 +743,7 @@ class Downloader(QueueMixin, WriteFileMixin):
                     d.addCallback(lambda ign: self._rename_deleted_file(abspath_u))
                 else:
                     d.addCallback(lambda ign: file_node.download_best_version())
-                    d.addCallback(lambda contents: self._write_downloaded_file(abspath_u, contents,
+                    d.addCallback(lambda contents: self._write_downloaded_file(abspath_u, contents, self._clock,
                                                                                is_conflict=is_conflict))
 
         d.addCallbacks(do_update_db, failed)

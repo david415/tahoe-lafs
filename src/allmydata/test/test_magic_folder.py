@@ -2,7 +2,7 @@
 import os, sys
 
 from twisted.trial import unittest
-from twisted.internet import defer, task
+from twisted.internet import defer, task, reactor
 
 from allmydata.interfaces import IDirectoryNode
 from allmydata.util.assertutil import precondition
@@ -1129,7 +1129,7 @@ class MockTest(MagicFolderTestMixin, unittest.TestCase):
         fileutil.write(local_file, "foo")
 
         # if is_conflict is False, then the .conflict file shouldn't exist.
-        writefile._write_downloaded_file(local_file, "bar", False, None)
+        writefile._write_downloaded_file(local_file, "bar", reactor, is_conflict=False)
         conflicted_path = local_file + u".conflict"
         self.failIf(os.path.exists(conflicted_path))
 
@@ -1145,7 +1145,7 @@ class MockTest(MagicFolderTestMixin, unittest.TestCase):
         self.failUnlessEqual(fileutil.read(local_file), "bar")
 
         # now a test for conflicted case
-        writefile._write_downloaded_file(local_file, "bar", True, None)
+        writefile._write_downloaded_file(local_file, "bar", reactor)
         self.failUnless(os.path.exists(conflicted_path))
 
         # .tmp file shouldn't exist
