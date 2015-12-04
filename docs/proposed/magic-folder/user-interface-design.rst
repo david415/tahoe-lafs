@@ -46,33 +46,7 @@ The assumption made by that design was that each client would be configured with
 the following information:
 
 * a write cap to its own *client DMD*.
-* a read cap to a *collective directory*.
-
-The collective directory contains links to each client DMD named by the
-corresponding client's nickname.
-
-This design was chosen to allow straightforward addition of clients without
-requiring each existing client to change its configuration.
-
-Note that each client in a Magic Folder collective has the authority to add,
-modify or delete any object within the Magic Folder. It is also able to control
-to some extent whether its writes will be treated by another client as overwrites
-or as conflicts. However, there is still a reliability benefit to preventing a
-client from accidentally modifying another client's DMD, or from accidentally
-modifying the collective directory in a way that would lose data. This motivates
-ensuring that each client only has access to the caps above, rather than, say,
-every client having a write cap to the collective directory.
-
-Another important design constraint is that we cannot violate the
-`write coordination directive`_; that is, we cannot write to the same mutable
-directory from multiple clients, even during the setup phase when adding a
-client.
-
-.. _`write coordination directive`: ../../write_coordination.rst
-
-Within these constraints, for usability we want to minimize the number of steps
-required to configure a Magic Folder collective.
-
+* a set of read caps to other *client DMDs*.
 
 Proposed Design
 ---------------
@@ -89,35 +63,23 @@ Three ``tahoe`` subcommands are added::
     immediately joins the newly created Magic Folder with that
     nickname and local directory.
 
+  tahoe magic-folder show MAGIC:
 
-  tahoe magic-folder invite MAGIC: THEIR_NICKNAME
+    Print the Magic Folder readcap so that it can be distributed
+    to clients wishing to subscribe.
 
-    Print an "invitation" that can be used to invite another
-    client to join a Magic Folder, with the given nickname.
+  tahoe magic-folder add-subscription MAGIC: ALIAS READ_CAP
 
-    The invitation must be sent to the user of the other client
-    over a secure channel (e.g. PGP email, OTR, or ssh).
+    This command adds a subscription to the given Magic Folder
+    read-cap.
 
-    This command will normally be run by the same client that
-    created the Magic Folder. However, it may be run by a
-    different client if the ``MAGIC:`` alias is copied to
-    the ``private/aliases`` file of that other client, or if
-    ``MAGIC:`` is replaced by the write cap to which it points.
+  tahoe magic-folder del-subscription MAGIC: ALIAS READ_CAP
 
+    Remove a subscription to a given alias/read-cap.
 
-  tahoe magic-folder join INVITATION LOCAL_DIR
-
-    Accept an invitation created by ``tahoe magic-folder invite``.
-    The current client joins the specified Magic Folder, which will
-    appear in the local filesystem at the given directory.
-
-
-There are no commands to remove a client or to revoke an
-invitation, although those are possible features that could
-be added in future. (When removing a client, it is necessary
-to copy each file it added to some other client's DMD, if it
-is the most recent version of that file.)
-
+Once a client has published a read-cap there is no way to revoke read access.
+This limitation has not been produced by Magic Folder but is a fundamental design
+property of Tahoe-LAFS.
 
 Implementation
 ''''''''''''''
