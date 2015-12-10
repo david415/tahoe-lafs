@@ -8,6 +8,9 @@ import hashlib
 import random
 
 class AESCipher:
+    block_size = 16
+    padding = '-'
+
     def __init__(self):
         pass
 
@@ -15,7 +18,7 @@ class AESCipher:
         not_stretched = hashlib.sha256(passphrase).digest()
         salt = not_stretched[:10] # XXX
         # XXX sufficiently paranoid?
-        return scrypt.hash(not_stretched, salt, p=500, r=20, N=2048, buflen=32)
+        return scrypt.hash(not_stretched, salt, p=500, r=20, N=1024, buflen=32)
 
     def set_key(self, key):
         key_hash = SHA256.new(key).hexdigest()
@@ -36,8 +39,11 @@ class AESCipher:
     def encrypt(self, plaintext):
         iv = ''.join(chr(random.randint(0, 0xFF)) for i in range(16))
         cipher = AES.new(self.key, AES.MODE_CFB, iv, segment_size=128)
-        ciphertext = cipher.encrypt(plaintext)
+
+        pad = lambda s: s + (self.block_size - len(s) % self.block_size) * self.padding
+        ciphertext = cipher.encrypt(pad(plaintext))
         mac = self.generate_hmac(ciphertext)
+
         return base64.b64encode(iv + ciphertext + mac)
 
     def decrypt(self, enc):
@@ -48,6 +54,6 @@ class AESCipher:
         verified_hmac = self.verify_hmac((iv+cipher_text), hmac)
         if verified_hmac:
             cipher = AES.new(self.key, AES.MODE_CFB, iv, segment_size=128)
-            return cipher.decrypt(cipher_text)
+            return cipher.decrypt(cipher_text).rstrip(self.padding)
         else:
             return None
