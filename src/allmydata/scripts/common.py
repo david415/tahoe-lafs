@@ -6,6 +6,7 @@ from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import unicode_to_url, quote_output, \
     quote_local_unicode_path, argv_to_abspath
 from allmydata.scripts.default_nodedir import _default_nodedir
+from allmydata.util import fileutil
 
 def get_default_nodedir():
     return _default_nodedir
@@ -97,6 +98,17 @@ class NoDefaultBasedirOptions(BasedirOptions):
 
 
 DEFAULT_ALIAS = u"tahoe"
+
+def get_encrypted_aliases(nodedir):
+    aliases = {}
+    aliasfile = os.path.join(nodedir, "private", "aliases")
+    alias_ciphertext = None
+    try:
+        alias_ciphertext = fileutil.read(aliasfile)
+        # XXX
+    except EnvironmentError:
+        pass
+    return aliases
 
 
 def get_aliases(nodedir):
