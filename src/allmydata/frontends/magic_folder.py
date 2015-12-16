@@ -238,7 +238,9 @@ class Uploader(QueueMixin):
 
     def _full_scan(self):
         print "FULL SCAN"
-        self._pending = self._db.get_all_relpaths()
+        self._pending = set(self._db.get_all_relpaths())
+        print "INITIAL PENDING from MAGICFOLDER DB"
+        print "_pending %r" % (self._pending,)
         self._log("all_files %r" % (self._pending))
         d = self._scan(u"")
         return d
@@ -319,6 +321,13 @@ class Uploader(QueueMixin):
         precondition(not relpath_u.endswith(u'/'), relpath_u)
 
         d = defer.succeed(None)
+        def _succeeded(res):
+            self._count('objects_succeeded')
+            return res
+        def _failed(f):
+            self._count('objects_failed')
+            self._log("%s while processing %r" % (f, relpath_u))
+            return f
 
         def _maybe_upload(val, now=None):
             if now is None:
@@ -328,10 +337,12 @@ class Uploader(QueueMixin):
 
             self._log("about to remove %r from pending set %r" %
                       (relpath_u, self._pending))
-            self._pending.remove(relpath_u)
+            print "pending contents before remove %r" % (self._pending,)
+            # XXX self._pending.remove(relpath_u)
             encoded_path_u = magicpath.path2magic(relpath_u)
 
             if not pathinfo.exists:
+                self._pending.remove(relpath_u)
                 # FIXME merge this with the 'isfile' case.
                 self._log("notified object %s disappeared (this is normal)" % quote_filepath(fp))
                 self._count('objects_disappeared')
@@ -367,11 +378,16 @@ class Uploader(QueueMixin):
                                                 pathinfo)
                     self._count('files_uploaded')
                 d2.addCallback(_add_db_entry)
+                d2.addCallbacks(_succeeded, _failed)
                 return d2
             elif pathinfo.islink:
+                self._pending.remove(relpath_u)
                 self.warn("WARNING: cannot upload symlink %s" % quote_filepath(fp))
-                return None
+                d = defer.succeed(None)
+                d.addCallbacks(_succeeded, _failed)
+                return d
             elif pathinfo.isdir:
+                self._pending.remove(relpath_u)
                 if not getattr(self._notifier, 'recursive_includes_new_subdirectories', False):
                     self._notifier.watch(fp, mask=self.mask, callbacks=[self._notify], recursive=True)
 
@@ -379,16 +395,20 @@ class Uploader(QueueMixin):
                 encoded_path_u += magicpath.path2magic(u"/")
                 self._log("encoded_path_u =  %r" % (encoded_path_u,))
                 upload_d = self._upload_dirnode.add_file(encoded_path_u, uploadable, metadata={"version":0}, overwrite=True)
-                def _succeeded(ign):
+                def _dir_succeeded(ign):
                     self._log("created subdirectory %r" % (relpath_u,))
                     self._count('directories_created')
-                def _failed(f):
+                    self._call_hook(None, 'processed')
+                def _dir_failed(f):
                     self._log("failed to create subdirectory %r" % (relpath_u,))
+                    self._count('objects_failed')
                     return f
                 upload_d.addCallbacks(_succeeded, _failed)
+                upload_d.addCallbacks(_dir_succeeded, _dir_failed)
                 upload_d.addCallback(lambda ign: self._scan(relpath_u))
                 return upload_d
             elif pathinfo.isfile:
+                self._pending.remove(relpath_u)
                 db_entry = self._db.get_db_entry(relpath_u)
 
                 last_downloaded_timestamp = now
@@ -419,21 +439,11 @@ class Uploader(QueueMixin):
                                                 pathinfo)
                     self._count('files_uploaded')
                 d2.addCallback(_add_db_entry)
-                return d2
             else:
                 self.warn("WARNING: cannot process special file %s" % quote_filepath(fp))
-                return None
-
+                d2 = defer.succeed(None)
+            d2.addCallbacks(_succeeded, _failed)
         d.addCallback(_maybe_upload)
-
-        def _succeeded(res):
-            self._count('objects_succeeded')
-            return res
-        def _failed(f):
-            self._count('objects_failed')
-            self._log("%s while processing %r" % (f, relpath_u))
-            return f
-        d.addCallbacks(_succeeded, _failed)
         return d
 
     def _get_metadata(self, encoded_path_u):

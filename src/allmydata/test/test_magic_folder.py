@@ -113,8 +113,8 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         return d
 
     def test_move_tree(self):
+        alice_clock = task.Clock()
         self.set_up_grid()
-
         self.local_dir = abspath_expanduser_unicode(self.unicode_or_fallback(u"l\u00F8cal_dir", u"local_dir"),
                                                     base=self.basedir)
         self.mkdir_nonascii(self.local_dir)
@@ -127,16 +127,32 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
         small_tree_dir = abspath_expanduser_unicode(small_tree_name, base=self.basedir)
         new_small_tree_dir = abspath_expanduser_unicode(small_tree_name, base=self.local_dir)
 
-        d = self.create_invite_join_magic_folder(u"Alice", self.local_dir)
+        # Alice creates a Magic Folder,
+        # invites herself then and joins.
+        d = self.do_create_magic_folder(0)
+        d.addCallback(lambda ign: self.do_invite(0, u"Alice\u00F8"))
+        def get_invite_code(result):
+            self.invite_code = result[1].strip()
+        d.addCallback(get_invite_code)
+        d.addCallback(lambda ign: self.do_join(0, self.local_dir, self.invite_code))
+        def get_alice_caps(ign):
+            self.alice_collective_dircap, self.alice_upload_dircap = self.get_caps_from_files(0)
+        d.addCallback(get_alice_caps)
+        d.addCallback(lambda ign: self.check_joined_config(0, self.alice_upload_dircap))
+        d.addCallback(lambda ign: self.check_config(0, self.local_dir))
+        def get_Alice_magicfolder(result):
+            self.magicfolder = self.init_magicfolder(0, self.alice_upload_dircap,
+                                                           self.alice_collective_dircap,
+                                                           self.local_dir, alice_clock)
+            return result
+        d.addCallback(get_Alice_magicfolder)
         d.addCallback(self._restart_client)
-
         def _check_move_empty_tree(res):
             print "_check_move_empty_tree"
-            uploaded_d = self.magicfolder.uploader.set_hook('processed')
+            uploaded_d = self.magicfolder.uploader.set_hook('processed', ignore_count=1)
             self.mkdir_nonascii(empty_tree_dir)
             os.rename(empty_tree_dir, new_empty_tree_dir)
             self.notify(to_filepath(new_empty_tree_dir), self.inotify.IN_MOVED_TO)
-
             return uploaded_d
         d.addCallback(_check_move_empty_tree)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
@@ -147,20 +163,22 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
 
         def _check_move_small_tree(res):
             print "_check_move_small_tree"
-            uploaded_d = self.magicfolder.uploader.set_hook('processed', ignore_count=1)
+            uploaded_d = self.magicfolder.uploader.set_hook('processed', ignore_count=2)
             self.mkdir_nonascii(small_tree_dir)
             what_path = abspath_expanduser_unicode(u"what", base=small_tree_dir)
             fileutil.write(what_path, "say when")
             os.rename(small_tree_dir, new_small_tree_dir)
             self.notify(to_filepath(new_small_tree_dir), self.inotify.IN_MOVED_TO)
-
             return uploaded_d
         d.addCallback(_check_move_small_tree)
+        def advance_clock(ignore):
+            alice_clock.advance(0)
+        d.addCallback(advance_clock)
+        #d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 2))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 3))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 1))
-        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
-        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 2))
 
         def _check_moved_tree_is_watched(res):
             print "_check_moved_tree_is_watched"
@@ -168,7 +186,6 @@ class MagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, ReallyEqual
             another_path = abspath_expanduser_unicode(u"another", base=new_small_tree_dir)
             fileutil.write(another_path, "file")
             self.notify(to_filepath(another_path), self.inotify.IN_CLOSE_WRITE)
-
             return uploaded_d
         d.addCallback(_check_moved_tree_is_watched)
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
