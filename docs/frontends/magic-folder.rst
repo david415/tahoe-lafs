@@ -58,6 +58,10 @@ gateway's ``tahoe.cfg`` file.
     If this is ``True``, Magic Folder will be enabled. The default value is
     ``False``.
 
+``download.umask = 077``
+    This species the umask to be used when writing downloaded files to the
+    local filesystem.
+
 ``local.directory = (UTF-8 path)``
 
     This specifies the local directory to be monitored for new or changed
