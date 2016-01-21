@@ -618,6 +618,7 @@ class Downloader(QueueMixin, WriteFileMixin):
                 if success:
                     if 'version' not in result[1]:
                         self._log("invalid remote metadata detected")
+                        continue
                     else:
                         if result[1]['version'] > max_version:
                             node, metadata = result
