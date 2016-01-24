@@ -329,7 +329,8 @@ class Uploader(QueueMixin):
             if now is None:
                 now = time.time()
             fp = self._get_filepath(relpath_u)
-            pathinfo = get_pathinfo(unicode_from_filepath(fp))
+            abspath_u = unicode_from_filepath(fp)
+            pathinfo = get_pathinfo(abspath_u)
 
             self._log("about to remove %r from pending set %r" %
                       (relpath_u, self._pending))
@@ -395,35 +396,18 @@ class Uploader(QueueMixin):
                 return upload_d
             elif pathinfo.isfile:
                 db_entry = self._db.get_db_entry(relpath_u)
-
-                last_downloaded_timestamp = now
-
-                if db_entry is None:
-                    new_version = 0
-                elif is_new_file(pathinfo, db_entry):
-                    new_version = db_entry.version + 1
-                else:
-                    self._log("Not uploading %r" % (relpath_u,))
-                    self._count('objects_not_uploaded')
-                    return None
-
-                metadata = { 'version': new_version,
-                             'last_downloaded_timestamp': last_downloaded_timestamp }
-                if db_entry is not None and db_entry.last_downloaded_uri is not None:
-                    metadata['last_downloaded_uri'] = db_entry.last_downloaded_uri
-
-                uploadable = FileName(unicode_from_filepath(fp), self._client.convergence)
-                d2 = self._upload_dirnode.add_file(encoded_path_u, uploadable,
-                                                   metadata=metadata, overwrite=True)
-
-                def _add_db_entry(filenode):
-                    filecap = filenode.get_uri()
-                    last_downloaded_uri = metadata.get('last_downloaded_uri', None)
-                    self._db.did_upload_version(relpath_u, new_version, filecap,
-                                                last_downloaded_uri, last_downloaded_timestamp,
-                                                pathinfo)
-                    self._count('files_uploaded')
-                d2.addCallback(_add_db_entry)
+                d2 = self._client.upload(FileName(abspath_u, self._client.convergence))
+                def _create_immutable_snapshot(content_filenode):
+                    if db_entry:
+                        children = dict(content = content_filenode, parent0 = db_entry.current)
+                    else:
+                        children = dict(content = content_filenode)
+                    return self._client.create_immutable_dirnode(children, self._client.convergence)
+                d2.addCallback(_create_immutable_snapshot)
+                def _send_snapshot(snapshot):
+                    self._upload_dirnode.add_file(encoded_path_u, snapshot,
+                                                  metadata={}, overwrite=True)
+                d2.addCallback(_upload_snapshot)
                 return d2
             else:
                 self.warn("WARNING: cannot process special file %s" % quote_filepath(fp))
