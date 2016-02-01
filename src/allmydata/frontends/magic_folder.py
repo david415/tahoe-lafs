@@ -402,7 +402,9 @@ class Uploader(QueueMixin):
                         children = dict(content = content_filenode, parent0 = db_entry.current)
                     else:
                         children = dict(content = content_filenode)
-                    return self._client.create_immutable_dirnode(children, self._client.convergence)
+                    snapshot = self._client.create_immutable_dirnode(children, self._client.convergence)
+                    self._db.persist_snapshot(snapshot)
+                    return snapshot
                 d2.addCallback(_create_immutable_snapshot)
                 def _send_snapshot(snapshot):
                     self._upload_dirnode.add_file(encoded_path_u, snapshot,
