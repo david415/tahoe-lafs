@@ -36,9 +36,21 @@ Alice creates a new Magic-Folder. ::
 
   tahoe magic-folder create magic:
 
+This command has the side-effect of creating an alias called
+"magic" which is a link to a Tahoe-LAFS cryptographic capability.
+Whoever possesses this capability can act as Magic-Folder group admin
+and invite additional users to the group.
 
-She can then invite herself and then join as separate subsequent steps
-or she can create, invite herself and join in one command::
+She can then invite herself ::
+
+  tahoe magic-folder invite Alice
+
+This invite command results in an invite-code being printed to stdout.
+Alice uses this invite code to join the group::
+
+  tahoe magic-folder join <INVITE-CODE>
+
+Or Alice can create, invite herself and join in one command::
 
   tahoe magic-folder create magic: alice alice-magic-folder
 
