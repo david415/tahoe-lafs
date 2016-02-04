@@ -61,71 +61,45 @@ Bob joins Alice's Magic-Folder::
 Security properties
 ===================
 
+scope
+`````
+
 The security and design tradeoffs we discuss in this section only refer
 to the current version of Magic-Folder. Let it be know that future versions
 may well have vastly different security properties as our development efforts
 continue to shed light onto the mysteries of capability and security domain
-isolation analysis for distributed ciphertext storage systems.
+isolation analysis for decentralized ciphertext storage systems.
+
+
+context
+```````
 
 The current version of Magic-Folder only supports correct conflict
-detection for two concurrent clients, however it's worth noting
-that the current design allows the admin to impersonate the user.
+detection for two concurrent clients, therefore it only makes sense
+to have concurrent groups of two.
 
-Furthermore this current design has some data revocation properties but relatively
-weak data durability properties. To give some more context to this design and
-security analysis I'll first explain a bit about how to analyze the security properties
-of using Tahoe-LAFS without Magic-Folder.
+The Tahoe-LAFS design for decentralized ciphertext storage makes very
+simple use of the grid storage servers. The client depends on the storage
+servers for very simple behavior serving requested shares of ciphertext.
 
-
-security tradeoffs for Tahoe-LAFS without Magic-Folder
-------------------------------------------------------
-
-The current Tahoe-LAFS system right now has a very different set of
-security tradeoffs than most ciphertext storage systems, namely that
-there is no access control at all. Rather than utilizing centralized
-pockets of excess authority, access control lists, Tahoe implements
-a cryptographic capabilties security model which is a cryptographic
-interpretation of the object capability security model.
-
-For a good introduction to the object security capability model we
-recommend reading "The Structure of Authority" [1] by Mark S. Miller.
-
-Our Tahoe-LAFS cryptographic capabilities are granular references to
-not only address remote file objects but to decrypt them as well. Therefore
-this allows granular condifential sharing of file objects between any
-of the users who have connecting information for that Tahoe storage grid.
-
-Users will share these cryptographic capabilities but they must use
-cryptographic channels to share them otherwise their capabilities will
-be leaked on the network and there could be systems administrators
-who would find and use these caps.
-
-Tahoe-LAFS currently does not have file deletion for immutable file objects,
-although there is a ciphertext garbage collector which can optionally run if the
-Tahoe storage operator enables it. If a user accidentally leaks his
-capability to an e-mailing list the capability will be irrevocably
-leaked. If someone gains access to the storage grid then that leaked
-capability will give them access to the plaintext documents. There is
-no convenient way to recover from this situation. If the storage servers
-garbage collect the ciphertext for the leaked file object then they
-will stop serving the ciphertext.
+Tahoe-LAFS does not posses any access control ablities. If a client has
+access to a given Tahoe-LAFS grid then nothing can prevent that client from
+retreiving the plaintext provided that the client possess a valid cryptographic
+capability which allows for retrieval AND decryption of the ciphertext.
 
 
-analysis of security domain isolation
-`````````````````````````````````````
+tradeoffs
+`````````
 
-The confidentiality of the user's ciphertext which is stored
-on Tahoe-LAFS storage nodes depends on the security isolation
-of the user's endpoint device which runs the Tahoe-LAFS client node.
-For the purposes of describing attack surface are on the confidentiality
-of the data we consider that the user's Tahoe-LAFS client node is
-effectively in the same security domain as the ciphertext.
+The current CLI design and data model have created a single point of failure
+(SPOF), the admin. It is remarkable that the admin not only cause data loss
+but also imporsonate other users.
 
-
-
-
-
-security tradeoffs for Tahoe-LAFS with current Magic-Folder
------------------------------------------------------------
-
-
+Clients do not record full file history, therefore data loss can be caused when
+a file deletion causes the Tahoe-LAFS cryptographic capability from being
+preserved. When a client removes a file the rest of the group members also cooperatively
+remove and forget their crypgraphic capability for that file. It it noteworthy that
+an actor in the Magic-Folder group could choose to remember the historical
+cryptographic capabilities. For this case revocation is not possible because
+the storage servers will continue to serve the ciphertext if asked for the valid
+share id.
