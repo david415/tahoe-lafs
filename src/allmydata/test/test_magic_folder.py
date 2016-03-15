@@ -473,24 +473,36 @@ class MagicFolderAliceBobTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, Rea
 
         yield iterate(self.alice_magicfolder)
 
-        for server_id in self.g.get_all_serverids():
-            self.g.break_server(server_id, count=1)
-        yield iterate(self.bob_magicfolder)
-        #yield iterate(self.bob_magicfolder)
-
-        # check the state
         yield self._check_version_in_dmd(self.alice_magicfolder, u"blam", 0)
         self._check_version_in_local_db(self.alice_magicfolder, u"blam", 0)
+
+        for server_id in self.g.get_all_serverids():
+            self.g.break_server(server_id, count=1)
+
+        yield iterate(self.bob_magicfolder)
         yield self._check_version_in_dmd(self.bob_magicfolder, u"blam", 0)
         self._check_version_in_local_db(self.bob_magicfolder, u"blam", 0)
         self.failUnlessReallyEqual(
             self._get_count('downloader.objects_failed', client=self.bob_magicfolder._client),
-            0
+            1
         )
         self.failUnlessReallyEqual(
             self._get_count('downloader.objects_downloaded', client=self.bob_magicfolder._client),
-            1
+            0
         )
+
+        #yield iterate(self.bob_magicfolder)
+        # check the state
+        #yield self._check_version_in_dmd(self.bob_magicfolder, u"blam", 0)
+        #self._check_version_in_local_db(self.bob_magicfolder, u"blam", 0)
+        #self.failUnlessReallyEqual(
+        #    self._get_count('downloader.objects_failed', client=self.bob_magicfolder._client),
+        #    1
+        #)
+        #self.failUnlessReallyEqual(
+        #    self._get_count('downloader.objects_downloaded', client=self.bob_magicfolder._client),
+        #    1
+        #)
 
     @defer.inlineCallbacks
     def test_alice_delete_and_restore(self):
