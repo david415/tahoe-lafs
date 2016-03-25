@@ -117,7 +117,7 @@ class IntroducerClient(service.Service, Referenceable):
     def load_announcements(self, storage_broker):
         if self.config_filepath.exists():
             with self.config_filepath.open() as f:
-                server_params = yaml.safe_load(f)
+                server_params = yaml.load(f)
                 f.close()
             if not isinstance(server_dict, dict):
                 msg = "Invalid cached storage server announcement encountered. No key/values found."
