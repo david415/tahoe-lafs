@@ -37,23 +37,6 @@ class RIIntroducerSubscriberClient_v1(RemoteInterface):
         """I accept announcements from the publisher."""
         return None
 
-    def set_encoding_parameters(parameters=(int, int, int)):
-        """Advise the client of the recommended k-of-n encoding parameters
-        for this grid. 'parameters' is a tuple of (k, desired, n), where 'n'
-        is the total number of shares that will be created for any given
-        file, while 'k' is the number of shares that must be retrieved to
-        recover that file, and 'desired' is the minimum number of shares that
-        must be placed before the uploader will consider its job a success.
-        n/k is the expansion ratio, while k determines the robustness.
-
-        Introducers should specify 'n' according to the expected size of the
-        grid (there is no point to producing more shares than there are
-        peers), and k according to the desired reliability-vs-overhead goals.
-
-        Note that setting k=1 is equivalent to simple replication.
-        """
-        return None
-
 # When Foolscap can handle multiple interfaces (Foolscap#17), the
 # full-powered introducer will implement both RIIntroducerPublisher and
 # RIIntroducerSubscriberService. Until then, we define
@@ -163,8 +146,6 @@ class IntroducerClient_v1(service.Service, Referenceable):
         # distinguish re-announcement from updates. It also provides memory
         # for clients who subscribe after startup.
         self._current_announcements = {}
-
-        self.encoding_parameters = None
 
         # hooks for unit tests
         self._debug_counts = {
@@ -345,9 +326,6 @@ class IntroducerClient_v1(service.Service, Referenceable):
             if service_name2 == service_name:
                 eventually(cb, nodeid, ann_d, *args, **kwargs)
 
-    def remote_set_encoding_parameters(self, parameters):
-        self.encoding_parameters = parameters
-
     def connected_to_introducer(self):
         return bool(self._publisher)
 
@@ -405,13 +383,11 @@ class IntroducerService_v1(service.MultiService, Referenceable):
         for service_name, subscribers in self._subscribers.items():
             for rref, when in subscribers.items():
                 tubid = rref.getRemoteTubID() or "?"
-                advertised_addresses = rrefutil.hosts_for_rref(rref)
                 remote_address = rrefutil.stringify_remote_address(rref)
                 nickname, version, app_versions = u"?", u"?", {}
                 sd = SubscriberDescriptor(service_name, when,
                                           nickname, version, app_versions,
-                                          advertised_addresses, remote_address,
-                                          tubid)
+                                          remote_address, tubid)
                 s.append(sd)
         return s
 

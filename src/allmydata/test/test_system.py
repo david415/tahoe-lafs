@@ -15,7 +15,6 @@ from allmydata.immutable.literal import LiteralFileNode
 from allmydata.immutable.filenode import ImmutableFileNode
 from allmydata.util import idlib, mathutil
 from allmydata.util import log, base32
-from allmydata.util.verlib import NormalizedVersion
 from allmydata.util.encodingutil import quote_output, unicode_to_argv
 from allmydata.util.fileutil import abspath_expanduser_unicode
 from allmydata.util.consumer import MemoryConsumer, download_to_data
@@ -27,7 +26,6 @@ from allmydata.mutable.common import NotWriteableError
 from allmydata.mutable import layout as mutable_layout
 from allmydata.mutable.publish import MutableData
 
-import foolscap
 from foolscap.api import DeadReferenceError, fireEventually
 from twisted.python.failure import Failure
 from twisted.web.client import getPage
@@ -812,8 +810,6 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
                                      {"storage": 5})
                 self.failUnlessEqual(data["announcement_summary"],
                                      {"storage": 5})
-                self.failUnlessEqual(data["announcement_distinct_hosts"],
-                                     {"storage": 1})
             except unittest.FailTest:
                 print
                 print "GET %s?t=json output was:" % self.introweb_url
@@ -1114,7 +1110,7 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
         d.addCallback(lambda res: getPage(self.helper_webish_url))
         def _got_welcome_helper(page):
             html = page.replace('\n', ' ')
-            self.failUnless(re.search('<img src="img/connected-yes.png" alt="Connected" />', html), page)
+            self.failUnless(re.search('<img (src="img/connected-yes.png" |alt="Connected" ){2}/>', html), page)
             self.failUnlessIn("Not running helper", page)
         d.addCallback(_got_welcome_helper)
 
@@ -1879,10 +1875,6 @@ class SystemTest(SystemTestMixin, RunBinTahoeMixin, unittest.TestCase):
 
 class Connections(SystemTestMixin, unittest.TestCase):
     def test_rref(self):
-        if NormalizedVersion(foolscap.__version__) < NormalizedVersion('0.6.4'):
-            raise unittest.SkipTest("skipped due to http://foolscap.lothar.com/trac/ticket/196 "
-                                    "(which does not affect normal usage of Tahoe-LAFS)")
-
         self.basedir = "system/Connections/rref"
         d = self.set_up_nodes(2)
         def _start(ign):

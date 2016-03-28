@@ -172,21 +172,28 @@ class FakeHistory:
         return []
 
 class FakeDisplayableServer(StubServer):
-    def __init__(self, serverid, nickname):
+    def __init__(self, serverid, nickname, connected,
+                 last_connect_time, last_loss_time, last_rx_time):
         StubServer.__init__(self, serverid)
-        self.announcement = {"my-version": "allmydata-tahoe-fake",
+        self.announcement = {"my-version": "tahoe-lafs-fake",
                              "service-name": "storage",
                              "nickname": nickname}
+        self.connected = connected
+        self.last_loss_time = last_loss_time
+        self.last_rx_time = last_rx_time
+        self.last_connect_time = last_connect_time
     def is_connected(self):
-        return True
+        return self.connected
     def get_permutation_seed(self):
         return ""
     def get_remote_host(self):
         return ""
     def get_last_loss_time(self):
-        return None
-    def get_announcement_time(self):
-        return None
+        return self.last_loss_time
+    def get_last_received_data_time(self):
+        return self.last_rx_time
+    def get_last_connect_time(self):
+        return self.last_connect_time
     def get_announcement(self):
         return self.announcement
     def get_nickname(self):
@@ -242,7 +249,13 @@ class FakeClient(Client):
         self.storage_broker = StorageFarmBroker(None, permute_peers=True)
         # fake knowledge of another server
         self.storage_broker.test_add_server("other_nodeid",
-                                            FakeDisplayableServer("other_nodeid", u"other_nickname \u263B"))
+            FakeDisplayableServer(
+                serverid="other_nodeid", nickname=u"other_nickname \u263B", connected = True,
+                last_connect_time = 10, last_loss_time = 20, last_rx_time = 30))
+        self.storage_broker.test_add_server("disconnected_nodeid",
+            FakeDisplayableServer(
+                serverid="other_nodeid", nickname=u"disconnected_nickname \u263B", connected = False,
+                last_connect_time = 15, last_loss_time = 25, last_rx_time = 35))
         self.introducer_client = None
         self.history = FakeHistory()
         self.uploader = FakeUploader()
@@ -268,14 +281,16 @@ class FakeClient(Client):
 
     MUTABLE_SIZELIMIT = FakeMutableFileNode.MUTABLE_SIZELIMIT
 
-class WebMixin(object):
+class WebMixin(testutil.TimezoneMixin):
     def setUp(self):
+        self.setTimezone('UTC-13:00')
         self.s = FakeClient()
         self.s.startService()
         self.staticdir = self.mktemp()
         self.clock = Clock()
+        self.fakeTime = 86460 # 1d 0h 1m 0s
         self.ws = webish.WebishServer(self.s, "0", staticdir=self.staticdir,
-                                      clock=self.clock)
+                                      clock=self.clock, now_fn=lambda:self.fakeTime)
         self.ws.setServiceParent(self.s)
         self.webish_port = self.ws.getPortnum()
         self.webish_url = self.ws.getURL()
@@ -601,7 +616,6 @@ class WebMixin(object):
             self.fail("%s was supposed to Error(302), not get '%s'" %
                       (which, res))
 
-
 class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixin, unittest.TestCase):
     def test_create(self):
         pass
@@ -613,12 +627,32 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             self.failUnlessIn(FAVICON_MARKUP, res)
             self.failUnlessIn('<a href="status">Recent and Active Operations</a>', res)
             self.failUnlessIn('<a href="statistics">Operational Statistics</a>', res)
-            self.failUnlessIn('<input type="hidden" name="t" value="report-incident" />', res)
+            self.failUnless(re.search('<input (type="hidden" |name="t" |value="report-incident" ){3}/>',res), res)
             self.failUnlessIn('Page rendered at', res)
             self.failUnlessIn('Tahoe-LAFS code imported from:', res)
             res_u = res.decode('utf-8')
             self.failUnlessIn(u'<td>fake_nickname \u263A</td>', res_u)
             self.failUnlessIn(u'<div class="nickname">other_nickname \u263B</div>', res_u)
+            self.failUnlessIn(u'Connected to <span>1</span>\n              of <span>2</span> known storage servers', res_u)
+            def timestamp(t):
+                return (u'"%s"' % (t,)) if self.have_working_tzset() else u'"[^"]*"'
+            self.failUnless(re.search(
+                u'<div class="status-indicator"><img (src="img/connected-yes.png" |alt="Connected" ){2}/>'
+                u'</div>\n                <a( class="timestamp"| title=%s){2}>1d\u00A00h\u00A00m\u00A050s</a>'
+                % timestamp(u'1970-01-01 13:00:10'), res_u), repr(res_u))
+            self.failUnless(re.search(
+                u'<div class="status-indicator"><img (src="img/connected-no.png" |alt="Disconnected" ){2}/>'
+                u'</div>\n                <a( class="timestamp"| title=%s){2}>1d\u00A00h\u00A00m\u00A035s</a>'
+                % timestamp(u'1970-01-01 13:00:25'), res_u), repr(res_u))
+            self.failUnless(re.search(
+                u'<td class="service-last-received-data"><a( class="timestamp"| title=%s){2}>'
+                u'1d\u00A00h\u00A00m\u00A030s</a></td>'
+                % timestamp(u'1970-01-01 13:00:30'), res_u), repr(res_u))
+            self.failUnless(re.search(
+                u'<td class="service-last-received-data"><a( class="timestamp"| title=%s){2}>'
+                u'1d\u00A00h\u00A00m\u00A025s</a></td>'
+                % timestamp(u'1970-01-01 13:00:35'), res_u), repr(res_u))
+
             self.failUnlessIn(u'\u00A9 <a href="https://tahoe-lafs.org/">Tahoe-LAFS Software Foundation', res_u)
             self.failUnlessIn('<td><h3>Available</h3></td>', res)
             self.failUnlessIn('123.5kB', res)
@@ -649,7 +683,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             html = res.replace('\n', ' ')
             self.failUnlessIn('<div class="furl">pb://someIntroducer/[censored]</div>', html)
             self.failIfIn('pb://someIntroducer/secret', html)
-            self.failUnless(re.search('<img src="img/connected-no.png" alt="Disconnected" />', html), res)
+            self.failUnless(re.search('<img (alt="Disconnected" |src="img/connected-no.png" ){2}/>', html), res)
         d.addCallback(_check_introducer_not_connected_unguessable)
 
         # introducer connected, unguessable furl
@@ -662,7 +696,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             html = res.replace('\n', ' ')
             self.failUnlessIn('<div class="furl">pb://someIntroducer/[censored]</div>', html)
             self.failIfIn('pb://someIntroducer/secret', html)
-            self.failUnless(re.search('<img src="img/connected-yes.png" alt="Connected" />', html), res)
+            self.failUnless(re.search('<img (src="img/connected-yes.png" |alt="Connected" ){2}/>', html), res)
         d.addCallback(_check_introducer_connected_unguessable)
 
         # introducer connected, guessable furl
@@ -674,7 +708,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         def _check_introducer_connected_guessable(res):
             html = res.replace('\n', ' ')
             self.failUnlessIn('<div class="furl">pb://someIntroducer/introducer</div>', html)
-            self.failUnless(re.search('<img src="img/connected-yes.png" alt="Connected" />', html), res)
+            self.failUnless(re.search('<img (src="img/connected-yes.png" |alt="Connected" ){2}/>', html), res)
         d.addCallback(_check_introducer_connected_guessable)
         return d
 
@@ -688,7 +722,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d.addCallback(_set_no_helper)
         def _check_no_helper(res):
             html = res.replace('\n', ' ')
-            self.failUnless(re.search('<img src="img/connected-not-configured.png" alt="Not Configured" />', html), res)
+            self.failUnless(re.search('<img (src="img/connected-not-configured.png" |alt="Not Configured" ){2}/>', html), res)
         d.addCallback(_check_no_helper)
 
         # enable helper, not connected
@@ -701,7 +735,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             html = res.replace('\n', ' ')
             self.failUnlessIn('<div class="furl">pb://someHelper/[censored]</div>', html)
             self.failIfIn('pb://someHelper/secret', html)
-            self.failUnless(re.search('<img src="img/connected-no.png" alt="Disconnected" />', html), res)
+            self.failUnless(re.search('<img (src="img/connected-no.png" |alt="Disconnected" ){2}/>', html), res)
         d.addCallback(_check_helper_not_connected)
 
         # enable helper, connected
@@ -714,7 +748,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             html = res.replace('\n', ' ')
             self.failUnlessIn('<div class="furl">pb://someHelper/[censored]</div>', html)
             self.failIfIn('pb://someHelper/secret', html)
-            self.failUnless(re.search('<img src="img/connected-yes.png" alt="Connected" />', html), res)
+            self.failUnless(re.search('<img (src="img/connected-yes.png" |alt="Connected" ){2}/>', html), res)
         d.addCallback(_check_helper_connected)
         return d
 
@@ -1509,7 +1543,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
     def _check_upload_and_mkdir_forms(self, html):
         # We should have a form to create a file, with radio buttons that allow
         # the user to toggle whether it is a CHK/LIT (default), SDMF, or MDMF file.
-        self.failUnlessIn('name="t" value="upload"', html)
+        self.failUnless(re.search('<input (name="t" |value="upload" |type="hidden" ){3}/>', html), html)
         self.failUnless(re.search('<input [^/]*id="upload-chk"', html), html)
         self.failUnless(re.search('<input [^/]*id="upload-sdmf"', html), html)
         self.failUnless(re.search('<input [^/]*id="upload-mdmf"', html), html)
@@ -1517,7 +1551,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         # We should also have the ability to create a mutable directory, with
         # radio buttons that allow the user to toggle whether it is an SDMF (default)
         # or MDMF directory.
-        self.failUnlessIn('name="t" value="mkdir"', html)
+        self.failUnless(re.search('<input (name="t" |value="mkdir" |type="hidden" ){3}/>', html), html)
         self.failUnless(re.search('<input [^/]*id="mkdir-sdmf"', html), html)
         self.failUnless(re.search('<input [^/]*id="mkdir-mdmf"', html), html)
 
@@ -1620,7 +1654,7 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d.addCallback(lambda res: self.GET(self.public_url + "/foo/empty/"))
         def _check4(res):
             self.failUnlessIn("directory is empty", res)
-            MKDIR_BUTTON_RE=re.compile('<input type="hidden" name="t" value="mkdir" />.*<legend class="freeform-form-label">Create a new directory in this directory</legend>.*<input type="submit" class="btn" value="Create" />', re.I)
+            MKDIR_BUTTON_RE=re.compile('<input (type="hidden" |name="t" |value="mkdir" ){3}/>.*<legend class="freeform-form-label">Create a new directory in this directory</legend>.*<input (type="submit" |class="btn" |value="Create" ){3}/>', re.I)
             self.failUnless(MKDIR_BUTTON_RE.search(res), res)
         d.addCallback(_check4)
 
@@ -3258,10 +3292,10 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d = self.GET("/")
         def _after_get_welcome_page(res):
             MKDIR_BUTTON_RE = re.compile(
-                '<form action="([^"]*)" method="post".*'
-                '<input type="hidden" name="t" value="([^"]*)" />[ ]*'
-                '<input type="hidden" name="([^"]*)" value="([^"]*)" />[ ]*'
-                '<input type="submit" class="btn" value="Create a directory[^"]*" />')
+                '<form(?: action="([^"]*)"| method="post"| enctype="multipart/form-data"){3}>.*'
+                '<input (?:type="hidden" |name="t" |value="([^"]*?)" ){3}/>[ ]*'
+                '<input (?:type="hidden" |name="([^"]*)" |value="([^"]*)" ){3}/>[ ]*'
+                '<input (type="submit" |class="btn" |value="Create a directory[^"]*" ){3}/>')
             html = res.replace('\n', ' ')
             mo = MKDIR_BUTTON_RE.search(html)
             self.failUnless(mo, html)
@@ -3874,8 +3908,8 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
         d = self.GET(self.public_url + "/foo?t=rename-form&name=bar.txt",
                      followRedirect=True)
         def _check(res):
-            self.failUnlessIn('name="when_done" value="."', res)
-            self.failUnless(re.search(r'name="from_name" value="bar\.txt"', res))
+            self.failUnless(re.search('<input (name="when_done" |value="." |type="hidden" ){3}/>', res), res)
+            self.failUnless(re.search(r'<input (readonly="true" |type="text" |name="from_name" |value="bar\.txt" ){4}/>', res), res)
             self.failUnlessIn(FAVICON_MARKUP, res)
         d.addCallback(_check)
         return d

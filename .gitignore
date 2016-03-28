@@ -17,12 +17,13 @@
 /bin/tahoe-script.py
 
 /.built
-/src/allmydata_tahoe.egg-info/
+/src/tahoe_lafs.egg-info/
 Twisted-*.egg
 zope.interface-*.egg
 .pc
 
 /_trial_temp*
+/_test_memory/
 /tmp*
 /*.patch
 /dist/
@@ -34,3 +35,4 @@ zope.interface-*.egg
 /coverage-html/
 /miscaptures.txt
 /violations.txt
+/.tox/

@@ -36,7 +36,7 @@ from twisted.python import usage
 
 from allmydata.util.assertutil import precondition
 from allmydata.util.encodingutil import listdir_unicode, unicode_platform, \
-    get_io_encoding, get_filesystem_encoding
+    get_io_encoding, get_filesystem_encoding, unicode_to_argv
 
 timeout = 480 # deep_check takes 360s on Zandr's linksys box, others take > 240s
 
@@ -49,8 +49,14 @@ def parse_options(basedir, command, args):
 
 class CLITestMixin(ReallyEqualMixin):
     def do_cli(self, verb, *args, **kwargs):
+        precondition(not [True for arg in args if not isinstance(arg, str)],
+                     "arguments to do_cli must be strs -- convert using unicode_to_argv", args=args)
+
+        # client_num is used to execute client CLI commands on a specific client.
+        client_num = kwargs.get("client_num", 0)
+
         nodeargs = [
-            "--node-directory", self.get_clientdir(),
+            "--node-directory", unicode_to_argv(self.get_clientdir(i=client_num)),
             ]
         argv = nodeargs + [verb] + list(args)
         stdin = kwargs.get("stdin", "")
@@ -1235,6 +1241,19 @@ class Options(ReallyEqualMixin, unittest.TestCase):
         self.failUnlessEqual(o['node-url'], "http://example.org:8111/")
         self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], private_uri)
         self.failUnlessEqual(o.where, u"")
+
+        # -u for --node-url used to clash with -u for --uri (tickets #1949 and #2137).
+        o = parse2(["-u", "http://example.org:8111/"])
+        self.failUnlessEqual(o['node-url'], "http://example.org:8111/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], private_uri)
+        self.failUnlessEqual(o.where, u"")
+        self.failIf(o["uri"])
+
+        o = parse2(["-u", "http://example.org:8111/", "--uri"])
+        self.failUnlessEqual(o['node-url'], "http://example.org:8111/")
+        self.failUnlessEqual(o.aliases[DEFAULT_ALIAS], private_uri)
+        self.failUnlessEqual(o.where, u"")
+        self.failUnless(o["uri"])
 
         o = parse2(["--dir-cap", "root"])
         self.failUnlessEqual(o['node-url'], "http://localhost:8080/")

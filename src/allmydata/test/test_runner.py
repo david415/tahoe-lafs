@@ -5,6 +5,7 @@ from twisted.trial import unittest
 
 from twisted.python import usage, runtime
 from twisted.internet import threads
+from twisted.internet.defer import inlineCallbacks, returnValue
 
 from allmydata.util import fileutil, pollmixin
 from allmydata.util.encodingutil import unicode_to_argv, unicode_to_output, get_filesystem_encoding
@@ -12,6 +13,7 @@ from allmydata.scripts import runner
 from allmydata.client import Client
 from allmydata.test import common_util
 import allmydata
+from allmydata._appname import __appname__
 
 
 timeout = 240
@@ -34,17 +36,24 @@ rootdir = get_root_from_file(srcfile)
 
 if hasattr(sys, 'frozen'):
     bintahoe = os.path.join(rootdir, 'tahoe')
-    if sys.platform == "win32" and os.path.exists(bintahoe + '.exe'):
-        bintahoe += '.exe'
 else:
     bintahoe = os.path.join(rootdir, 'bin', 'tahoe')
-    if sys.platform == "win32":
-        bintahoe += '.pyscript'
-        if not os.path.exists(bintahoe):
-            alt_bintahoe = os.path.join(rootdir, 'Scripts', 'tahoe.pyscript')
-            if os.path.exists(alt_bintahoe):
-                bintahoe = alt_bintahoe
 
+if sys.platform == "win32" and not os.path.exists(bintahoe):
+    scriptsdir = os.path.join(rootdir, 'Scripts')
+    for alt_bintahoe in (bintahoe + '.pyscript',
+                         bintahoe + '-script.py',
+                         os.path.join(scriptsdir, 'tahoe.pyscript'),
+                         os.path.join(scriptsdir, 'tahoe-script.py'),):
+        if os.path.exists(alt_bintahoe):
+            bintahoe = alt_bintahoe
+            break
+
+
+# This memoizes find_import_location(), so we don't have to run
+# --version-and-path multiple times for the same binary. In practice, this
+# will only ever have one entry.
+CACHED_IMPORT_PATH = {}
 
 class RunBinTahoeMixin:
     def skip_if_cannot_run_bintahoe(self):
@@ -56,6 +65,19 @@ class RunBinTahoeMixin:
         if runtime.platformType == "win32":
             # twistd on windows doesn't daemonize. cygwin should work normally.
             raise unittest.SkipTest("twistd does not fork under windows")
+
+    @inlineCallbacks
+    def find_import_location(self):
+        if bintahoe in CACHED_IMPORT_PATH:
+            returnValue(CACHED_IMPORT_PATH[bintahoe])
+        res = yield self.run_bintahoe(["--version-and-path"])
+        out, err, rc_or_sig = res
+        self.assertEqual(rc_or_sig, 0, res)
+        lines = out.splitlines()
+        tahoe_pieces = lines[0].split()
+        self.assertEqual(tahoe_pieces[0], "%s:" % (__appname__,), (tahoe_pieces, res))
+        CACHED_IMPORT_PATH[bintahoe] = tahoe_pieces[-1].strip("()")
+        returnValue(CACHED_IMPORT_PATH[bintahoe])
 
     def run_bintahoe(self, args, stdin=None, python_options=[], env=None):
         self.skip_if_cannot_run_bintahoe()
@@ -80,66 +102,29 @@ class RunBinTahoeMixin:
 
 
 class BinTahoe(common_util.SignalMixin, unittest.TestCase, RunBinTahoeMixin):
-    def _check_right_code(self, file_to_check):
-        root_to_check = get_root_from_file(file_to_check)
-        if os.path.basename(root_to_check) == 'dist':
-            root_to_check = os.path.dirname(root_to_check)
+    @inlineCallbacks
+    def test_the_right_code(self):
+        # running "tahoe" in a subprocess should find the same code that
+        # holds this test file, else something is weird
+        test_path = os.path.dirname(os.path.dirname(os.path.normcase(os.path.realpath(srcfile))))
+        bintahoe_import_path = yield self.find_import_location()
 
-        cwd = os.path.normcase(os.path.realpath("."))
-        root_from_cwd = os.path.dirname(cwd)
-        if os.path.basename(root_from_cwd) == 'src':
-            root_from_cwd = os.path.dirname(root_from_cwd)
-
-        # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
-        if os.path.basename(root_from_cwd).startswith('tmp'):
-            root_from_cwd = os.path.dirname(root_from_cwd)
-
-        same = (root_from_cwd == root_to_check)
+        same = (bintahoe_import_path == test_path)
         if not same:
-            try:
-                same = os.path.samefile(root_from_cwd, root_to_check)
-            except AttributeError, e:
-                e  # hush pyflakes
+            msg = ("My tests and my 'tahoe' executable are using different paths.\n"
+                   "tahoe: %r\n"
+                   "tests: %r\n"
+                   "( according to the test source filename %r)\n" %
+                   (bintahoe_import_path, test_path, srcfile))
 
-        if not same:
-            msg = ("We seem to be testing the code at %r,\n"
-                   "(according to the source filename %r),\n"
-                   "but expected to be testing the code at %r.\n"
-                   % (root_to_check, file_to_check, root_from_cwd))
-
-            root_from_cwdu = os.path.dirname(os.path.normcase(os.path.normpath(os.getcwdu())))
-            if os.path.basename(root_from_cwdu) == u'src':
-                root_from_cwdu = os.path.dirname(root_from_cwdu)
-
-            # This is needed if we are running in a temporary directory created by 'make tmpfstest'.
-            if os.path.basename(root_from_cwdu).startswith(u'tmp'):
-                root_from_cwdu = os.path.dirname(root_from_cwdu)
-
-            if not isinstance(root_from_cwd, unicode) and root_from_cwd.decode(get_filesystem_encoding(), 'replace') != root_from_cwdu:
-                msg += ("However, this may be a false alarm because the current directory path\n"
-                        "is not representable in the filesystem encoding. Please run the tests\n"
-                        "from the root of the Tahoe-LAFS distribution at a non-Unicode path.")
+            if (not isinstance(rootdir, unicode) and
+                rootdir.decode(get_filesystem_encoding(), 'replace') != rootdir):
+                msg += ("However, this may be a false alarm because the import path\n"
+                        "is not representable in the filesystem encoding.")
                 raise unittest.SkipTest(msg)
             else:
-                msg += "Please run the tests from the root of the Tahoe-LAFS distribution."
+                msg += "Please run the tests in a virtualenv that includes both the Tahoe-LAFS library and the 'tahoe' executable."
                 self.fail(msg)
-
-    def test_the_right_code(self):
-        self._check_right_code(srcfile)
-
-    def test_import_in_repl(self):
-        d = self.run_bintahoe(["debug", "repl"],
-                              stdin="import allmydata; print; print allmydata.__file__")
-        def _cb(res):
-            out, err, rc_or_sig = res
-            self.failUnlessEqual(rc_or_sig, 0, str(res))
-            lines = out.splitlines()
-            self.failUnlessIn('>>>', lines[0], str(res))
-            self._check_right_code(lines[1])
-        d.addCallback(_cb)
-        return d
-    # The timeout was exceeded on FreeStorm's CentOS5-i386.
-    test_import_in_repl.timeout = 480
 
     def test_path(self):
         d = self.run_bintahoe(["--version-and-path"])
@@ -297,6 +282,19 @@ class CreateNode(unittest.TestCase):
         self.failUnlessEqual(rc, 0)
         self.failUnless(os.path.exists(n3))
         self.failUnless(os.path.exists(os.path.join(n3, tac)))
+
+        if kind in ("client", "node", "introducer"):
+            # test that the output (without --quiet) includes the base directory
+            n4 = os.path.join(basedir, command + "-n4")
+            argv = [command, n4]
+            rc, out, err = self.run_tahoe(argv)
+            self.failUnlessEqual(err, "")
+            self.failUnlessIn(" created in ", out)
+            self.failUnlessIn(n4, out)
+            self.failIfIn("\\\\?\\", out)
+            self.failUnlessEqual(rc, 0)
+            self.failUnless(os.path.exists(n4))
+            self.failUnless(os.path.exists(os.path.join(n4, tac)))
 
         # make sure it rejects too many arguments
         argv = [command, "basedir", "extraarg"]

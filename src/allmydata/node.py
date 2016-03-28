@@ -13,6 +13,7 @@ from allmydata.util.assertutil import precondition, _assert
 from allmydata.util.fileutil import abspath_expanduser_unicode
 from allmydata.util.encodingutil import get_filesystem_encoding, quote_output
 from allmydata.util.anonymize import is_anonymous
+from allmydata.util import configutil
 
 # Add our application versions to the data that Foolscap's LogPublisher
 # reports.
@@ -138,27 +139,13 @@ class Node(service.MultiService):
                                          % (quote_output(fn), section, option))
             return default
 
-    def set_config(self, section, option, value):
-        if not self.config.has_section(section):
-            self.config.add_section(section)
-        self.config.set(section, option, value)
-        assert self.config.get(section, option) == value
-
     def read_config(self):
         self.error_about_old_config_files()
         self.config = ConfigParser.SafeConfigParser()
 
         tahoe_cfg = os.path.join(self.basedir, "tahoe.cfg")
         try:
-            f = open(tahoe_cfg, "rb")
-            try:
-                # Skip any initial Byte Order Mark. Since this is an ordinary file, we
-                # don't need to handle incomplete reads, and can assume seekability.
-                if f.read(3) != '\xEF\xBB\xBF':
-                    f.seek(0)
-                self.config.readfp(f)
-            finally:
-                f.close()
+            self.config = configutil.get_config(tahoe_cfg)
         except EnvironmentError:
             if os.path.exists(tahoe_cfg):
                 raise
@@ -175,7 +162,7 @@ class Node(service.MultiService):
             # provide a value.
             try:
                 file_tubport = fileutil.read(self._portnumfile).strip()
-                self.set_config("node", "tub.port", file_tubport)
+                configutil.set_config(self.config, "node", "tub.port", file_tubport)
             except EnvironmentError:
                 if os.path.exists(self._portnumfile):
                     raise
@@ -396,7 +383,7 @@ class Node(service.MultiService):
             self.tub.setOption("log-gatherer-furl", lgfurl)
         self.tub.setOption("log-gatherer-furlfile",
                            os.path.join(self.basedir, "log_gatherer.furl"))
-        self.tub.setOption("bridge-twisted-logs", True)
+
         incident_dir = os.path.join(self.basedir, "logs", "incidents")
         foolscap.logging.log.setLogDir(incident_dir.encode(get_filesystem_encoding()))
 

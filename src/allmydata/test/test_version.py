@@ -43,19 +43,12 @@ class CheckRequirement(unittest.TestCase):
 
         self._check_success("foolscap[secure_connections] >= 0.6.0", {"foolscap": ("0.7.0", "", None)})
 
-        try:
-            self._check_success("foolscap[secure_connections] >= 0.6.0", {"foolscap": ("0.6.1+", "", None)})
-            # succeeding is ok
-        except PackagingError, e:
-            self.failUnlessIn("could not parse", str(e))
-
         self._check_failure("foolscap[secure_connections] >= 0.6.0", {"foolscap": ("0.5.1", "", None)})
         self._check_failure("pycrypto >= 2.1.0, != 2.2, != 2.4", {"pycrypto": ("2.2.0", "", None)})
         self._check_failure("pycrypto >= 2.1.0, != 2.2, != 2.4", {"pycrypto": ("2.0.0", "", None)})
         self._check_failure("Twisted >= 11.0.0, <= 12.2.0", {"Twisted": ("10.2.0", "", None)})
         self._check_failure("Twisted >= 11.0.0, <= 12.2.0", {"Twisted": ("13.0.0", "", None)})
         self._check_failure("foo >= 1.0", {})
-        self._check_failure("foo >= 1.0", {"foo": ("irrational", "", None)})
 
         self.failUnlessRaises(ImportError, check_requirement,
                               "foo >= 1.0", {"foo": (None, None, "foomodule")})
@@ -91,23 +84,24 @@ class CheckRequirement(unittest.TestCase):
         self.failIfEqual(errors, [])
         self.failUnlessEqual([e for e in errors if "was not found by pkg_resources" not in e], [])
 
-    def test_cross_check_ticket_1355(self):
+    def test_cross_check_unparseable_versions(self):
         # The bug in #1355 is triggered when a version string from either pkg_resources or import
         # is not parseable at all by normalized_version.
 
         res = cross_check({"foo": ("unparseable", "")}, [("foo", ("1.0", "", None))])
-        self.failUnlessEqual(len(res), 1)
-        self.failUnlessIn("by pkg_resources could not be parsed", res[0])
+        self.failUnlessEqual(res, [])
 
         res = cross_check({"foo": ("1.0", "")}, [("foo", ("unparseable", "", None))])
-        self.failUnlessEqual(len(res), 1)
-        self.failUnlessIn(") could not be parsed", res[0])
+        self.failUnlessEqual(res, [])
+
+        res = cross_check({"foo": ("unparseable", "")}, [("foo", ("unparseable", "", None))])
+        self.failUnlessEqual(res, [])
 
     def test_cross_check(self):
         res = cross_check({}, [])
         self.failUnlessEqual(res, [])
 
-        res = cross_check({}, [("allmydata-tahoe", ("1.0", "", "blah"))])
+        res = cross_check({}, [("tahoe-lafs", ("1.0", "", "blah"))])
         self.failUnlessEqual(res, [])
 
         res = cross_check({"foo": ("unparseable", "")}, [])
@@ -118,7 +112,8 @@ class CheckRequirement(unittest.TestCase):
 
         res = cross_check({}, [("foo", ("unparseable", "", None))])
         self.failUnlessEqual(len(res), 1)
-        self.failUnlessIn("not found by pkg_resources", res[0])
+        self.failUnlessIn("version 'unparseable'", res[0])
+        self.failUnlessIn("was not found by pkg_resources", res[0])
 
         res = cross_check({"distribute": ("1.0", "/somewhere")}, [("setuptools", ("2.0", "/somewhere", "distribute"))])
         self.failUnlessEqual(res, [])
@@ -134,9 +129,15 @@ class CheckRequirement(unittest.TestCase):
         res = cross_check({"zope.interface": ("1.0", "")}, [("zope.interface", ("unknown", "", None))])
         self.failUnlessEqual(res, [])
 
+        res = cross_check({"zope.interface": ("unknown", "")}, [("zope.interface", ("unknown", "", None))])
+        self.failUnlessEqual(res, [])
+
         res = cross_check({"foo": ("1.0", "")}, [("foo", ("unknown", "", None))])
         self.failUnlessEqual(len(res), 1)
         self.failUnlessIn("could not find a version number", res[0])
+
+        res = cross_check({"foo": ("unknown", "")}, [("foo", ("unknown", "", None))])
+        self.failUnlessEqual(res, [])
 
         # When pkg_resources and import both find a package, there is only a warning if both
         # the version and the path fail to match.
