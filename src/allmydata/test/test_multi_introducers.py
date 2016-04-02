@@ -1,6 +1,7 @@
 #!/usr/bin/python
-import os
+import os, yaml
 
+from twisted.python.filepath import FilePath
 from twisted.trial import unittest
 from allmydata.util.fileutil import write, remove
 from allmydata.client import Client
@@ -8,7 +9,12 @@ from allmydata.scripts.create_node import write_node_config
 from allmydata.web.root import Root
 
 INTRODUCERS_CFG_FURLS=['furl1', 'furl2']
-INTRODUCERS_CFG_FURLS_COMMENTED=['furl1', '#furl2', 'furl3']
+INTRODUCERS_CFG_FURLS_COMMENTED="""introducers:
+  !!python/unicode 'intro1': {furl: furl1, subscribe_only: false}
+#  !!python/unicode 'intro2': {furl: furl4, subscribe_only: false}
+servers: {}
+transport_plugins: {}
+        """
 
 class MultiIntroTests(unittest.TestCase):
 
@@ -24,28 +30,35 @@ class MultiIntroTests(unittest.TestCase):
         c.write("introducer.furl = %s\n" % fake_furl)
         c.close()
         os.mkdir(os.path.join(self.basedir,"private"))
-        self.introducers_file = os.path.join(self.basedir,"private", "introducers")
-
-        # create a basedir/private/introducers
-        write(self.introducers_file, '\n'.join(INTRODUCERS_CFG_FURLS))
 
     def test_introducer_count(self):
         """ Ensure that the Client creates same number of introducer clients
         as found in "basedir/private/introducers" config file. """
-        write(self.introducers_file, '\n'.join(INTRODUCERS_CFG_FURLS))
-
+        connections = {'introducers':
+            {
+            u'intro1':{ 'furl': 'furl1',
+                  'subscribe_only': False },
+            u'intro2':{ 'furl': 'furl4',
+                  'subscribe_only': False }
+        },
+                       'servers':{},
+                       'transport_plugins':{}
+        }
+        connections_filepath = FilePath(os.path.join(self.basedir, "private", "connections.yaml"))
+        connections_filepath.setContent(yaml.dump(connections))
         # get a client and count of introducer_clients
         myclient = Client(self.basedir)
         ic_count = len(myclient.introducer_clients)
 
         # assertions
-        self.failUnlessEqual(ic_count, 2)
+        self.failUnlessEqual(ic_count, 3)
 
     def test_introducer_count_commented(self):
         """ Ensure that the Client creates same number of introducer clients
         as found in "basedir/private/introducers" config file when there is one
         commented."""
-        write(self.introducers_file, '\n'.join(INTRODUCERS_CFG_FURLS_COMMENTED))
+        connections_filepath = FilePath(os.path.join(self.basedir, "private", "connections.yaml"))
+        connections_filepath.setContent(INTRODUCERS_CFG_FURLS_COMMENTED)
         # get a client and count of introducer_clients
         myclient = Client(self.basedir)
         ic_count = len(myclient.introducer_clients)
@@ -79,13 +92,14 @@ class MultiIntroTests(unittest.TestCase):
         c = open(os.path.join(self.basedir,"tahoe.cfg"), "w")
         config = {}
         write_node_config(c, config)
-        fake_furl = "furl0"
+        fake_furl = "furl1"
         c.write("[client]\n")
         c.write("introducer.furl = %s\n" % fake_furl)
         c.close()
 
-        # prepare "basedir/private/introducers"
-        write(self.introducers_file, '\n'.join(INTRODUCERS_CFG_FURLS))
+        # prepare "basedir/private/connections.yml
+        connections_filepath = FilePath(os.path.join(self.basedir, "private", "connections.yaml"))
+        connections_filepath.setContent(INTRODUCERS_CFG_FURLS_COMMENTED)
 
         # get a client
         myclient = Client(self.basedir)
