@@ -46,6 +46,8 @@ from allmydata.util import log, fileutil
 
 from ctypes import POINTER, byref, create_string_buffer, addressof
 
+print "IMPORTED OSX INOTIFY ---<< <---!!\n\n"
+
 class Event(object):
     """
     * id:    an integer event ID
@@ -59,7 +61,36 @@ class Event(object):
 
     def __repr__(self):
         return ("Event(%r, %r, %r)"
-                % (self.id, _flags_to_string.get(self.flags, self.flags), self.path)
+                % (self.id, self.flags, self.path)
+                #% (self.id, _flags_to_string.get(self.flags, self.flags), self.path)
+
+
+class INotify(PollMixin):
+    def __init__(self):
+        self._state = NOT_STARTED
+        self._filter = None
+        self._callbacks = None
+        self._pending = set()
+        self._pending_delay = 1.0
+
+    def set_pending_delay(self, delay):
+        self._pending_delay = delay
+
+    def startReading(self):
+        deferToThread(self._thread)
+        return self.poll(lambda: self._state != NOT_STARTED)
+
+    def stopReading(self):
+        # FIXME race conditions
+        if self._state != STOPPED:
+            self._state = STOPPING
+
+    def watch(self, path, mask=IN_WATCH_MASK, autoAdd=False, callbacks=None, recursive=False):
+        precondition(self._state == NOT_STARTED, "watch() can only be called before startReading()", state=self._state)
+        precondition(self._filter is None, "only one watch is supported")
+        precondition(isinstance(autoAdd, bool), autoAdd=autoAdd)
+        precondition(isinstance(recursive, bool), recursive=recursive)
+        print "WATCH no-op!"
 
 # 
 # //-----------------------------------------------------------------------------
