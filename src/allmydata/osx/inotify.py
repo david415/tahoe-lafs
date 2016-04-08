@@ -43,6 +43,7 @@ from allmydata.util.fake_inotify import humanReadableMask, \
 from allmydata.util.assertutil import _assert, precondition
 from allmydata.util.encodingutil import quote_output
 from allmydata.util import log, fileutil
+from allmydata.util.pollmixin import PollMixin
 
 from ctypes import POINTER, byref, create_string_buffer, addressof
 
@@ -60,10 +61,14 @@ class Event(object):
         self.path = path
 
     def __repr__(self):
-        return ("Event(%r, %r, %r)"
-                % (self.id, self.flags, self.path)
-                #% (self.id, _flags_to_string.get(self.flags, self.flags), self.path)
+        return ("Event(%r, %r, %r)" % (self.id, self.flags, self.path))
+#% (self.id, _flags_to_string.get(self.flags, self.flags), self.path)
 
+
+NOT_STARTED = "NOT_STARTED"
+STARTED     = "STARTED"
+STOPPING    = "STOPPING"
+STOPPED     = "STOPPED"
 
 class INotify(PollMixin):
     def __init__(self):
