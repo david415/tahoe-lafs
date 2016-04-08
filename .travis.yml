@@ -26,7 +26,8 @@ install:
 before_script:
   - env
   - which python && python --version
-  - pip install -e .
+  - if [ "${TRAVIS_OS_NAME}" = "linux" ]; then sudo pip install -e .; fi
+  - if [ "${TRAVIS_OS_NAME}" = "osx" ]; then pip install -e .; fi
 script:
   - coverage run --branch --source=src/allmydata `which tahoe` --version-and-path debug trial --rterrors --reporter=timing
 after_success:
