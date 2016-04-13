@@ -48,9 +48,8 @@ from allmydata.util.pollmixin import PollMixin
 from ctypes import POINTER, byref, create_string_buffer, addressof
 from ctypes import cdll, c_void_p
 from ctypes.util import find_library
-print "IMPORTED OSX INOTIFY ---<< <---!!\n\n"
-fsevents = cdll.LoadLibrary(find_library('FSEvents'))
-print dir(fsevents)
+
+corelib = cdll.LoadLibrary(find_library('CoreServices'))
 
 class Event(object):
     """
