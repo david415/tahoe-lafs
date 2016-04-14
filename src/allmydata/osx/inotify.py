@@ -45,11 +45,13 @@ from allmydata.util.encodingutil import quote_output
 from allmydata.util import log, fileutil
 from allmydata.util.pollmixin import PollMixin
 
+import ctypes
 from ctypes import POINTER, byref, create_string_buffer, addressof
 from ctypes import cdll, c_void_p
 from ctypes.util import find_library
 
-corelib = cdll.LoadLibrary(find_library('CoreServices'))
+core_services = cdll.LoadLibrary(find_library('CoreServices'))
+core_foundation = cdll.LoadLibrary(find_library('CoreFoundation'))
 
 class Event(object):
     """
@@ -97,7 +99,70 @@ class INotify(PollMixin):
         precondition(self._filter is None, "only one watch is supported")
         precondition(isinstance(autoAdd, bool), autoAdd=autoAdd)
         precondition(isinstance(recursive, bool), recursive=recursive)
-        print "WATCH no-op!"
+
+        self._path = path
+        path_u = path.path
+        if not isinstance(path_u, unicode):
+            path_u = path_u.decode(sys.getfilesystemencoding())
+            _assert(isinstance(path_u, unicode), path_u=path_u)
+
+
+        
+            
+        fs_event_stream_ref = core_services.FSEventStreamCreate(ctypes.c_int.in_dll(core_services, "kCFAllocatorDefault"),
+                                                                fsevent_callback,
+                                                                context,
+                                                                paths_to_watch,
+                                                                kFSEventStreamEventIdSinceNow,
+                                                                latency,
+                                                                kFSEventStreamCreateFlagWatchRoot)
+
+        core_services.FSEventStreamScheduleWithRunLoop(fs_event_stream_ref,
+                                         core_services.CFRunLoopGetCurrent(),
+                                         ctypes.c_int.in_dll(core_services, "kCFRunLoopDefaultMode"));
+
+        core_services.FSEventStreamStart(fs_event_stream_ref)
+        
+    def _thread(self):
+        try:
+            _assert(self._filter is not None, "no watch set")
+
+            # To call Twisted or Tahoe APIs, use reactor.callFromThread as described in
+            # <http://twistedmatrix.com/documents/current/core/howto/threading.html>.
+
+            fni = FileNotifyInformation()
+
+            while True:
+                self._state = STARTED
+                fni.read_changes(self._hDirectory, self._recursive, self._filter)
+                for info in fni:
+                    if self._state == STOPPING:
+                        hDirectory = self._hDirectory
+                        self._callbacks = None
+                        self._hDirectory = None
+                        CloseHandle(hDirectory)
+                        self._state = STOPPED
+                        return
+
+                    path = self._path.preauthChild(info.filename)  # FilePath with Unicode path
+                    #mask = _action_to_inotify_mask.get(info.action, IN_CHANGED)
+
+                    def _maybe_notify(path):
+                        if path not in self._pending:
+                            self._pending.add(path)
+                            def _do_callbacks():
+                                self._pending.remove(path)
+                                for cb in self._callbacks:
+                                    try:
+                                        cb(None, path, IN_CHANGED)
+                                    except Exception, e:
+                                        log.err(e)
+                            reactor.callLater(self._pending_delay, _do_callbacks)
+                    reactor.callFromThread(_maybe_notify, path)
+        except Exception, e:
+            log.err(e)
+            self._state = STOPPED
+            raise
 
 # 
 # //-----------------------------------------------------------------------------
