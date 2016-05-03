@@ -1,5 +1,5 @@
 
-import time
+import time, yaml
 from zope.interface import implements
 from twisted.application import service
 from foolscap.api import Referenceable, eventually, RemoteInterface
@@ -47,7 +47,7 @@ class IntroducerClient(service.Service, Referenceable):
 
     def __init__(self, tub, introducer_furl,
                  nickname, my_version, oldest_supported,
-                 app_versions, sequencer):
+                 app_versions, sequencer, cache_filepath):
         self._tub = tub
         self.introducer_furl = introducer_furl
 
@@ -57,6 +57,7 @@ class IntroducerClient(service.Service, Referenceable):
         self._oldest_supported = oldest_supported
         self._app_versions = app_versions
         self._sequencer = sequencer
+        self.cache_filepath = cache_filepath
 
         self._my_subscriber_info = { "version": 0,
                                      "nickname": self._nickname,
@@ -112,6 +113,19 @@ class IntroducerClient(service.Service, Referenceable):
                      level=log.WEIRD, failure=failure, umid="c5MqUQ")
         d = self._tub.getReference(self.introducer_furl)
         d.addErrback(connect_failed)
+
+    def _save_announcement(self, ann):
+        if self.cache_filepath.exists():
+            with self.cache_filepath.open() as f:
+                announcements = yaml.load(f)
+                f.close()
+        else:
+            announcements = []
+        if ann in announcements:
+            return
+        announcements.append(ann)
+        ann_yaml = yaml.dump(announcements)
+        self.cache_filepath.setContent(ann_yaml)
 
     def _got_introducer(self, publisher):
         self.log("connected to introducer, getting versions")
@@ -348,6 +362,11 @@ class IntroducerClient(service.Service, Referenceable):
         for (service_name2,cb,args,kwargs) in self._local_subscribers:
             if service_name2 == service_name:
                 eventually(cb, key_s, ann, *args, **kwargs)
+
+        server_params = {}
+        server_params['ann'] = ann
+        server_params['key_s'] = key_s
+        self._save_announcement(server_params)
 
     def connected_to_introducer(self):
         return bool(self._publisher)
