@@ -57,7 +57,7 @@ class IntroducerClient(service.Service, Referenceable):
         self._oldest_supported = oldest_supported
         self._app_versions = app_versions
         self._sequencer = sequencer
-        self.cache_filepath = cache_filepath
+        self._cache_filepath = cache_filepath
 
         self._my_subscriber_info = { "version": 0,
                                      "nickname": self._nickname,
@@ -115,8 +115,8 @@ class IntroducerClient(service.Service, Referenceable):
         d.addErrback(connect_failed)
 
     def _save_announcement(self, ann):
-        if self.cache_filepath.exists():
-            with self.cache_filepath.open() as f:
+        if self._cache_filepath.exists():
+            with self._cache_filepath.open() as f:
                 announcements = yaml.load(f)
                 f.close()
         else:
@@ -125,7 +125,7 @@ class IntroducerClient(service.Service, Referenceable):
             return
         announcements.append(ann)
         ann_yaml = yaml.dump(announcements)
-        self.cache_filepath.setContent(ann_yaml)
+        self._cache_filepath.setContent(ann_yaml)
 
     def _got_introducer(self, publisher):
         self.log("connected to introducer, getting versions")
