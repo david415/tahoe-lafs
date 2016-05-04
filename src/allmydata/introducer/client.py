@@ -117,7 +117,10 @@ class IntroducerClient(service.Service, Referenceable):
     def _save_announcement(self, ann):
         if self._cache_filepath.exists():
             with self._cache_filepath.open() as f:
-                announcements = yaml.load(f)
+                def constructor(loader, node):
+                    return node.value
+                yaml.SafeLoader.add_constructor("tag:yaml.org,2002:python/unicode", constructor)
+                announcements = yaml.safe_load(f)
                 f.close()
         else:
             announcements = []
