@@ -1007,8 +1007,8 @@ class Announcements(unittest.TestCase):
         self.failUnlessEqual(a[0].version, "my_version")
         self.failUnlessEqual(a[0].announcement["anonymous-storage-FURL"], furl1)
 
-    def test_client_cache_v2(self):
-        basedir = "introducer/ClientSeqnums/test_client_cache"
+    def test_client_cache_1(self):
+        basedir = "introducer/ClientSeqnums/test_client_cache_1"
         fileutil.make_dirs(basedir)
         cache_filepath = FilePath(os.path.join(basedir, "private", "introducer_cache.yaml"))
 
@@ -1043,6 +1043,40 @@ class Announcements(unittest.TestCase):
 
         self.failUnlessEqual(len(announcements), 1)
         self.failUnlessEqual("pub-" + announcements[0]['key_s'], vk_s)
+
+    def test_client_cache_2(self):
+        basedir = "introducer/ClientSeqnums/test_client_cache_2"
+        fileutil.make_dirs(basedir)
+        cache_filepath = FilePath(os.path.join(basedir, "private", "introducer_cache.yaml"))
+
+        # if storage is enabled, the Client will publish its storage server
+        # during startup (although the announcement will wait in a queue
+        # until the introducer connection is established). To avoid getting
+        # confused by this, disable storage.
+        f = open(os.path.join(basedir, "tahoe.cfg"), "w")
+        f.write("[client]\n")
+        f.write("introducer.furl = nope\n")
+        f.write("[storage]\n")
+        f.write("enabled = false\n")
+        f.close()
+
+        c = TahoeClient(basedir)
+        ic = c.introducer_client
+        furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@192.168.69.247:36106,127.0.0.1:36106/gydnpigj2ja2qr2srq4ikjwnl7xfgbra"
+        ann1 = (furl1, "storage", "RIStorage", "nick1", "ver23", "ver0")
+        ann = make_ann_t(ic, furl1, '', 2)
+        ic.got_announcements([ann])
+
+        # check the cache for the announcement
+        with cache_filepath.open() as f:
+            def constructor(loader, node):
+                return node.value
+            yaml.SafeLoader.add_constructor("tag:yaml.org,2002:python/unicode", constructor)
+            announcements = yaml.safe_load(f)
+            f.close()
+
+        self.failUnlessEqual(len(announcements), 1)
+        self.failUnlessEqual(announcements[0]['key_s'], None)
 
 
 class ClientSeqnums(unittest.TestCase):
