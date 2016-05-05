@@ -111,12 +111,30 @@ class IntroducerClient(service.Service, Referenceable):
         def connect_failed(failure):
             self.log("Initial Introducer connection failed: perhaps it's down",
                      level=log.WEIRD, failure=failure, umid="c5MqUQ")
+            self.load_announcements()
         d = self._tub.getReference(self.introducer_furl)
         d.addErrback(connect_failed)
 
+    def _load_announcements(self):
+        if self._cache_filepath.exists():
+            with self._cache_filepath.open() as f:
+                servers = yaml.load(f)
+                f.close()
+            if not isinstance(servers, list):
+                msg = "Invalid cached storage server announcements. No list encountered."
+                self.log(msg,
+                         level=log.WEIRD)
+                raise storage_client.UnknownServerTypeError(msg)
+            for server_params in servers:
+                if not isinstance(server_params, dict):
+                    msg = "Invalid cached storage server announcement encountered. No key/values found in %s" % server_params
+                    self.log(msg,
+                             level=log.WEIRD)
+                    raise storage_client.UnknownServerTypeError(msg)
+                eventually(self._got_announcement_cb, server_params['key_s'], server_params['ann'], self.plugins)
+
     def _save_announcement(self, ann):
         if self._cache_filepath.exists():
-            print "cache exists"
             with self._cache_filepath.open() as f:
                 def constructor(loader, node):
                     return node.value
@@ -124,14 +142,12 @@ class IntroducerClient(service.Service, Referenceable):
                 announcements = yaml.safe_load(f)
                 f.close()
         else:
-            print "cache not exist"
             announcements = []
         if ann in announcements:
             return
         announcements.append(ann)
         ann_yaml = yaml.dump(announcements)
         self._cache_filepath.setContent(ann_yaml)
-        print "after setContent called"
 
     def _got_introducer(self, publisher):
         self.log("connected to introducer, getting versions")
@@ -300,7 +316,6 @@ class IntroducerClient(service.Service, Referenceable):
             self._process_announcement(ann, key_s)
 
     def _process_announcement(self, ann, key_s):
-        print "process announcement"
         self._debug_counts["inbound_announcement"] += 1
         service_name = str(ann["service-name"])
         if service_name not in self._subscribed_service_names:
@@ -336,7 +351,6 @@ class IntroducerClient(service.Service, Referenceable):
                      service=service_name, description=description,
                      parent=lp2, level=log.UNUSUAL, umid="B1MIdA")
             self._debug_counts["duplicate_announcement"] += 1
-            print "duplicate"
             return
 
         # does it update an existing one?
@@ -349,7 +363,6 @@ class IntroducerClient(service.Service, Referenceable):
                     self.log("not replacing old announcement, no valid seqnum: %s"
                              % (ann,),
                              parent=lp2, level=log.NOISY, umid="zFGH3Q")
-                    print "not replacing old ann"
                     return
                 if ann["seqnum"] <= old["seqnum"]:
                     # note that exact replays are caught earlier, by
@@ -359,7 +372,6 @@ class IntroducerClient(service.Service, Referenceable):
                              "(replay attack?): %s"
                              % (ann["seqnum"], old["seqnum"], ann),
                              parent=lp2, level=log.UNUSUAL, umid="JAAAoQ")
-                    print "not replacing old ann2"
                     return
                 # ok, seqnum is newer, allow replacement
             self._debug_counts["update"] += 1
@@ -381,7 +393,6 @@ class IntroducerClient(service.Service, Referenceable):
         server_params['ann'] = ann
         server_params['key_s'] = key_s
         self._save_announcement(server_params)
-        print "fin."
 
     def connected_to_introducer(self):
         return bool(self._publisher)
