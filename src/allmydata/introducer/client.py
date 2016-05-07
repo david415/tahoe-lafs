@@ -111,7 +111,7 @@ class IntroducerClient(service.Service, Referenceable):
         def connect_failed(failure):
             self.log("Initial Introducer connection failed: perhaps it's down",
                      level=log.WEIRD, failure=failure, umid="c5MqUQ")
-            self.load_announcements()
+            self._load_announcements()
         d = self._tub.getReference(self.introducer_furl)
         d.addErrback(connect_failed)
 
@@ -131,7 +131,7 @@ class IntroducerClient(service.Service, Referenceable):
                     self.log(msg,
                              level=log.WEIRD)
                     raise storage_client.UnknownServerTypeError(msg)
-                eventually(self._got_announcement_cb, server_params['key_s'], server_params['ann'], self.plugins)
+                eventually(self._got_announcement_cb, server_params['key_s'], server_params['ann'])
 
     def _save_announcement(self, ann):
         if self._cache_filepath.exists():
@@ -184,6 +184,7 @@ class IntroducerClient(service.Service, Referenceable):
         return log.msg(*args, **kwargs)
 
     def subscribe_to(self, service_name, cb, *args, **kwargs):
+        self._got_announcement_cb = cb
         self._local_subscribers.append( (service_name,cb,args,kwargs) )
         self._subscribed_service_names.add(service_name)
         self._maybe_subscribe()
@@ -298,7 +299,6 @@ class IntroducerClient(service.Service, Referenceable):
         return self.got_announcements(announcements, lp)
 
     def got_announcements(self, announcements, lp=None):
-        print "got_announcements"
         # this is the common entry point for both v1 and v2 announcements
         self._debug_counts["inbound_message"] += 1
         for ann_t in announcements:
@@ -309,7 +309,6 @@ class IntroducerClient(service.Service, Referenceable):
             except BadSignatureError:
                 self.log("bad signature on inbound announcement: %s" % (ann_t,),
                          parent=lp, level=log.WEIRD, umid="ZAU15Q")
-                print "bad sig"
                 # process other announcements that arrived with the bad one
                 continue
 
@@ -322,8 +321,6 @@ class IntroducerClient(service.Service, Referenceable):
             self.log("announcement for a service we don't care about [%s]"
                      % (service_name,), level=log.UNUSUAL, umid="dIpGNA")
             self._debug_counts["wrong_service"] += 1
-            print "wrong service; not in %r" % self._subscribed_service_names
-            
             return
         # for ASCII values, simplejson might give us unicode *or* bytes
         if "nickname" in ann and isinstance(ann["nickname"], str):
