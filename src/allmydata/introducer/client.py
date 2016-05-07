@@ -114,6 +114,13 @@ class IntroducerClient(service.Service, Referenceable):
             self._load_announcements()
         d = self._tub.getReference(self.introducer_furl)
         d.addErrback(connect_failed)
+        def remove_cache(result):
+            try:
+                self._cache_filepath.remove()
+            except OSError, e:
+                pass
+            return result
+        d.addCallback(remove_cache)
 
     def _load_announcements(self):
         if self._cache_filepath.exists():
