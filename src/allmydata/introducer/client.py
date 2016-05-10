@@ -389,10 +389,7 @@ class IntroducerClient(service.Service, Referenceable):
             if service_name2 == service_name:
                 eventually(cb, key_s, ann, *args, **kwargs)
 
-        server_params = {}
-        server_params['ann'] = ann
-        server_params['key_s'] = key_s
-        self._save_announcement(server_params)
+        self._save_announcements()
 
     def connected_to_introducer(self):
         return bool(self._publisher)
