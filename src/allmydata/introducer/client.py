@@ -140,21 +140,17 @@ class IntroducerClient(service.Service, Referenceable):
                     raise storage_client.UnknownServerTypeError(msg)
                 eventually(self._got_announcement_cb, server_params['key_s'], server_params['ann'])
 
-    def _save_announcement(self, ann):
-        if self._cache_filepath.exists():
-            with self._cache_filepath.open() as f:
-                def constructor(loader, node):
-                    return node.value
-                yaml.SafeLoader.add_constructor("tag:yaml.org,2002:python/unicode", constructor)
-                announcements = yaml.safe_load(f)
-                f.close()
-        else:
-            announcements = []
-        if ann in announcements:
-            return
-        announcements.append(ann)
-        ann_yaml = yaml.dump(announcements)
-        self._cache_filepath.setContent(ann_yaml)
+    def _save_announcements(self):
+        announcements = []
+        for _, value in self._inbound_announcements.items():
+            ann, key_s, time_stamp = value
+            server_params = {
+                "ann" : ann,
+                "key_s" : key_s,
+                }
+            announcements.append(server_params)
+        announcement_cache_yaml = yaml.dump(announcements)
+        self._cache_filepath.setContent(announcement_cache_yaml)
 
     def _got_introducer(self, publisher):
         self.log("connected to introducer, getting versions")
