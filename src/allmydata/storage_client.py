@@ -135,6 +135,30 @@ class StorageFarmBroker(service.MultiService):
         self.introducer_client = ic = introducer_client
         ic.subscribe_to("storage", self._got_announcement)
 
+    def _ensure_tub_created(self, serverid, transport_plugins):
+        if serverid in self.tubs:
+            return
+        self.tubs[serverid] = Tub()
+
+        for name, handler in transport_plugins.items():
+            self.tubs[serverid].addConnectionHintHandler(name, handler)
+
+        # XXX set options?
+        self.tubs[serverid].setServiceParent(self)
+
+    def got_static_announcement(self, key_s, ann, transport_plugins):
+        if key_s is not None:
+            precondition(isinstance(key_s, str), key_s)
+            precondition(key_s.startswith("v0-"), key_s)
+        assert ann["service-name"] == "storage"
+        s = NativeStorageServer(key_s, ann)
+        server_id = s.get_serverid()
+        assert server_id not in self.static_servers # XXX
+        self.static_servers.append(server_id)
+        self.servers[server_id] = s
+        self._ensure_tub_created(server_id, transport_plugins)
+        s.start_connecting(self.tubs[server_id], self._trigger_connections)
+
     def _got_connection(self):
         # this is called by NativeStorageClient when it is connected
         self._server_listeners.notify()

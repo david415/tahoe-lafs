@@ -1,4 +1,4 @@
-import os, stat, time, weakref
+import os, stat, time, weakref, yaml
 from allmydata import node
 from base64 import urlsafe_b64encode
 
@@ -125,6 +125,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.started_timestamp = time.time()
         self.logSource="Client"
         self.encoding_params = self.DEFAULT_ENCODING_PARAMETERS.copy()
+        self.load_connections()
         self.init_introducer_client()
         self.init_stats_provider()
         self.init_secrets()
@@ -180,7 +181,25 @@ class Client(node.Node, pollmixin.PollMixin):
                               self.get_app_versions(),
                               self._sequencer, introducer_cache_filepath)
         self.introducer_client = ic
-        ic.setServiceParent(self)
+
+    def load_connections(self):
+        """
+        Load the connections.yaml file if it exists, otherwise
+        create a default configuration. Abort startup and report
+        an error to the user if the tahoe.cfg contains an introducer
+        FURL which is also found in the connections.yaml.
+        """
+        self.warn_flag = False
+        connections_filepath = FilePath(os.path.join(self.basedir, "private", "connections.yaml"))
+        if connections_filepath.exists():
+            exists = True
+            with connections_filepath.open() as f:
+                self.connections_config = yaml.load(f)
+                f.close()
+        else:
+            exists = False
+            self.connections_config = { 'servers' : {} }
+            connections_filepath.setContent(yaml.dump(self.connections_config))
 
     def init_stats_provider(self):
         gatherer_furl = self.get_config("client", "stats_gatherer.furl", None)
@@ -360,32 +379,15 @@ class Client(node.Node, pollmixin.PollMixin):
         helper = storage_client.ConnectedEnough(sb, connection_threshold)
         self.upload_ready_d = helper.when_connected_enough()
 
-        # load static server specifications from tahoe.cfg, if any.
-        # Not quite ready yet.
-        #if self.config.has_section("client-server-selection"):
-        #    server_params = {} # maps serverid to dict of parameters
-        #    for (name, value) in self.config.items("client-server-selection"):
-        #        pieces = name.split(".")
-        #        if pieces[0] == "server":
-        #            serverid = pieces[1]
-        #            if serverid not in server_params:
-        #                server_params[serverid] = {}
-        #            server_params[serverid][pieces[2]] = value
-        #    for serverid, params in server_params.items():
-        #        server_type = params.pop("type")
-        #        if server_type == "tahoe-foolscap":
-        #            s = storage_client.NativeStorageClient(*params)
-        #        else:
-        #            msg = ("unrecognized server type '%s' in "
-        #                   "tahoe.cfg [client-server-selection]server.%s.type"
-        #                   % (server_type, serverid))
-        #            raise storage_client.UnknownServerTypeError(msg)
-        #        sb.add_server(s.serverid, s)
+        # utilize the loaded static server specifications
+        servers = self.connections_config['servers']
+        for server_id in servers.keys():
+            if self.testing:
+                self.storage_broker.got_static_announcement(servers[server_id]['key_s'], servers[server_id]['announcement'])
+            else:
+                eventually(self.storage_broker.got_static_announcement, servers[server_id]['key_s'], servers[server_id]['announcement'])
 
-        # check to see if we're supposed to use the introducer too
-        if self.get_config("client-server-selection", "use_introducer",
-                           default=True, boolean=True):
-            sb.use_introducer(self.introducer_client)
+        sb.use_introducer(self.introducer_client)
 
     def get_storage_broker(self):
         return self.storage_broker
