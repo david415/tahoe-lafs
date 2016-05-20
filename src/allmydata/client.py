@@ -96,6 +96,29 @@ class Terminator(service.Service):
             c.stop()
         return service.Service.stopService(self)
 
+def load_plugins(transport_dict):
+    """
+    load_plugins( transport_dict ) -> plugins_dict
+    transform a transport specification dict into.
+    plugins_dict of type plugin_name -> plugin_handler
+    """
+    print "load_plugins"
+    plugins = {}
+    def getattr_qualified(obj, name):
+        for attr in name.split("."):
+            obj = getattr(obj, attr)
+        return obj
+    for name in transport_dict.keys():
+        print "name %s" % name
+        handler_dict = transport_dict[name]
+        handler_module, handler_name = handler_dict['handler'].split(':')
+        del handler_dict['handler']
+        handler_func = getattr_qualified(handler_module, handler_name)
+        print "handler_func %r" % handler_func
+        handler = handler_func(**handler_dict)
+        plugins[name] = handler
+    print "plugin keys %s" % plugins.keys()
+    return plugins
 
 class Client(node.Node, pollmixin.PollMixin):
     implements(IStatsProducer)
@@ -213,12 +236,29 @@ class Client(node.Node, pollmixin.PollMixin):
             exists = False
             self.connections_config = { 'servers' : {},
                                         'introducers' : {},
+                                        'global' : {
+                                            'connection_types' : {
+                                                'tcp' : {
+                                                    'handler': 'foolscap.connection_plugins:DefaultTCP'
+                                                }
+                                            }
+                                        }
             }
+
             connections_filepath.setContent(yaml.safe_dump(self.connections_config))
 
+        # global scoped foolscap transport plugins
+        plugins = load_plugins(self.connections_config['global']['connection_types'])
+        self.tub.removeAllConnectionHintHandlers()
+        for name, handler in plugins.items():
+            self.tub.addConnectionHintHandler(name, handler)
+
+        # introducers
         self.old_introducer_config_compatiblity()
         introducers = self.connections_config['introducers']
         for nickname in introducers:
+            if introducers[nickname].has_key('transport_plugins'):
+                plugins = load_plugins(introducers[nickname]['transport_plugins'])
             introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", nickname))
             self.introducer_furls.append(introducers[nickname]['furl'])
             ic = IntroducerClient(introducers[nickname]['furl'],
@@ -226,7 +266,8 @@ class Client(node.Node, pollmixin.PollMixin):
                                   str(allmydata.__full_version__),
                                   str(self.OLDEST_SUPPORTED_VERSION),
                                   self.get_app_versions(),
-                                  self._sequencer, introducer_cache_filepath)
+                                  self._sequencer, introducer_cache_filepath,
+                                  plugins)
             self.introducer_clients.append(ic)
 
         # init introducer_clients as usual

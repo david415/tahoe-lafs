@@ -52,13 +52,16 @@ class IntroducerClient(service.MultiService, Referenceable):
 
     def __init__(self, introducer_furl,
                  nickname, my_version, oldest_supported,
-                 app_versions, sequencer, cache_filepath):
+                 app_versions, sequencer, cache_filepath, plugins):
         service.MultiService.__init__(self)
 
         self._tub = Tub()
+        self.plugins = plugins
+        for name, handler in plugins.items():
+            self._tub.addConnectionHintHandler(name, handler)
         self._tub.setServiceParent(self)
-        self.introducer_furl = introducer_furl
 
+        self.introducer_furl = introducer_furl
         assert type(nickname) is unicode
         self._nickname = nickname
         self._my_version = my_version
@@ -397,11 +400,11 @@ class IntroducerClient(service.MultiService, Referenceable):
 
         self._deliver_announcements(key_s, ann)
 
-    def _deliver_announcements(self, key_s, ann):
+    def _deliver_announcements(self, key_s, ann, plugins):
         service_name = str(ann["service-name"])
         for (service_name2,cb,args,kwargs) in self._local_subscribers:
             if service_name2 == service_name:
-                eventually(cb, key_s, ann, *args, **kwargs)
+                eventually(cb, key_s, ann, plugins, *args, **kwargs)
 
     def connected_to_introducer(self):
         return bool(self._publisher)

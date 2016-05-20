@@ -139,23 +139,23 @@ class StorageFarmBroker(service.MultiService):
         # this is called by NativeStorageClient when it is connected
         self._server_listeners.notify()
 
-    def got_static_announcement(self, key_s, ann):
+    def got_static_announcement(self, key_s, ann, transport_plugins):
         print "got static announcement"
         if key_s is not None:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann) # XXX tub_options=...
+        s = NativeStorageServer(key_s, ann, tub_options=self._tub_options, transport_plugins=transport_plugins)
         server_id = s.get_serverid()
         self.servers[server_id] = s
         s.start_connecting(self._trigger_connections)
 
-    def _got_announcement(self, key_s, ann):
+    def _got_announcement(self, key_s, ann, transport_plugins):
         if key_s is not None:
             precondition(isinstance(key_s, str), key_s)
             precondition(key_s.startswith("v0-"), key_s)
         assert ann["service-name"] == "storage"
-        s = NativeStorageServer(key_s, ann, self._tub_options)
+        s = NativeStorageServer(key_s, ann, tub_options=self._tub_options, transport_plugins=transport_plugins)
         s.on_status_changed(lambda _: self._got_connection())
         serverid = s.get_serverid()
         old = self.servers.get(serverid)
@@ -267,11 +267,12 @@ class NativeStorageServer(service.MultiService):
         "application-version": "unknown: no get_version()",
         }
 
-    def __init__(self, key_s, ann, tub_options={}):
+    def __init__(self, key_s, ann, tub_options={}, transport_plugins={}):
         service.MultiService.__init__(self)
         self.key_s = key_s
         self.announcement = ann
         self._tub_options = tub_options
+        self._transport_plugins = transport_plugins
 
         assert "anonymous-storage-FURL" in ann, ann
         furl = str(ann["anonymous-storage-FURL"])
@@ -372,6 +373,8 @@ class NativeStorageServer(service.MultiService):
         self._tub = Tub()
         for (name, value) in self._tub_options.items():
             self._tub.setOption(name, value)
+        for name, handler in self._transport_plugins.items():
+            self._tub.addConnectionHintHandler(name, handler)
         self._tub.setServiceParent(self)
 
         furl = str(self.announcement["anonymous-storage-FURL"])
