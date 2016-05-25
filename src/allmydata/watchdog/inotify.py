@@ -72,11 +72,11 @@ class INotifyEventHandler(FileSystemEventHandler):
             return
         #if not self.is_masked(event):
         #    return
-        #try:
-        #    event_path = self._path.preauthChild(event.src_path)
-        #except InsecurePath, e:
-        #    print "failed: %r" % (e,)
-        #    return
+        try:
+            event_path = self._path.preauthChild(event.src_path)
+        except InsecurePath, e:
+            print "failed: %r" % (e,)
+            return
 
         def _maybe_notify(path):
             if path in self._pending:
