@@ -3,8 +3,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemMovedEvent, FileModifiedEvent, DirModifiedEvent, FileCreatedEvent, FileDeletedEvent, DirCreatedEvent, DirDeletedEvent
 
 from twisted.internet import reactor
-from twisted.python.filepath import FilePath
-from twisted.python.filepath import InsecurePath
+from twisted.python.filepath import FilePath, InsecurePath
 
 from allmydata.util.pollmixin import PollMixin
 from allmydata.util.assertutil import _assert, precondition
@@ -44,14 +43,35 @@ class INotifyEventHandler(FileSystemEventHandler):
     def process(self, event):
         event_filepath_u = event.src_path.decode(encodingutil.get_filesystem_encoding())
 
-        if event_filepath_u == unicode_from_filepath(self._path):
+        if event_filepath_u == unicode_from_filepath(self._path) and isinstance(event, FileSystemMovedEvent):
+            try:
+                self._path.preauthChild(event.dest_path().decode(encodingutil.get_filesystem_encoding()))
+                event_filepath_u = event.dest_path().decode(encodingutil.get_filesystem_encoding())
+            except InsecurePath, e:
+                print "failed: %r" % (e,)
+                return
+            except ValueError, e:
+                print "failed: %r" % (e,)
             # ignore events for parent directory
+            #return
+        try:
+            event_path = self._path.preauthChild(event_filepath_u)
+        except InsecurePath, e:
+            print "failed: %r" % (e,)
             return
-        #try:
-        #    event_path = self._path.preauthChild(event.src_path)
-        #except InsecurePath, e:
-        #    print "failed: %r" % (e,)
-        #    return
+        except ValueError, e:
+            print "failed: %r" % (e,)
+            if isinstance(event, FileSystemMovedEvent):
+                try:
+                    self._path.preauthChild(event.dest_path().decode(encodingutil.get_filesystem_encoding()))
+                    event_filepath_u = event.dest_path().decode(encodingutil.get_filesystem_encoding())
+                except InsecurePath, e:
+                    print "failed: %r" % (e,)
+                    return
+                except InsecurePath, e:
+                    print "failed: %r" % (e,)
+                    return
+                event_filepath_u = event.dest_path().decode(encodingutil.get_filesystem_encoding())
 
         def _maybe_notify(path):
             if path in self._pending:
@@ -63,11 +83,15 @@ class INotifyEventHandler(FileSystemEventHandler):
                 event_mask = IN_CHANGED
                 if event.is_directory:
                     event_mask = event_mask | IN_ISDIR
-                for cb in self._callbacks:
-                    try:
-                        cb(None, FilePath(path), event_mask)
-                    except Exception, e:
-                        log.err(e)
+                def do_notification():
+                    for cb in self._callbacks:
+                        try:
+                            cb(None, FilePath(path), event_mask)
+                            if isinstance(event, FileSystemMovedEvent):
+                                cb(None, FilePath(path), event_mask)
+                        except Exception, e:
+                            log.err(e)
+                do_notification()
             _do_callbacks()
         reactor.callFromThread(_maybe_notify, event_filepath_u)
 

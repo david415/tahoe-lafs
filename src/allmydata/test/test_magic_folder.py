@@ -218,6 +218,7 @@ class CheckerMixin(object):
                                    expected)
 
     def _get_count(self, name, client=None):
+        print "_get_count name %s" % (name,)
         counters = (client or self.get_client()).stats_provider.get_stats()["counters"]
         return counters.get('magic_folder.%s' % (name,), 0)
 
@@ -1230,6 +1231,10 @@ class SingleMagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, Reall
 
     def test_magic_folder(self):
         d = defer.succeed(None)
+        def meow(fu, n):
+            print "meow %s" % n
+            return fu
+        d.addCallback(lambda res: meow(res, 1))
         # Write something short enough for a LIT file.
         d.addCallback(lambda ign: self._check_file(u"short", "test"))
 
