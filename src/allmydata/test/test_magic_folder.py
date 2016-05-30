@@ -177,8 +177,11 @@ class CheckerMixin(object):
         yield iterate(self.magicfolder)
         encoded_name_u = magicpath.path2magic(name_u)
 
+        print "uploader.objects_failed %r" % (self._get_count('uploader.objects_failed'), )
         yield self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0)
         if temporary:
+            print "uploader.objects_disappeared %s" % (self._get_count('uploader.objects_disappeared'),)
+            print "previously_disappeared + 1 == %r" % (previously_disappeared + 1,)
             yield self.failUnlessReallyEqual(self._get_count('uploader.objects_disappeared'),
                                              previously_disappeared + 1)
         else:
@@ -1230,22 +1233,32 @@ class SingleMagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, Reall
 
     def test_magic_folder(self):
         d = defer.succeed(None)
+
+        def meow(res, n):
+            print "meow %r" % (n,)
+            return res
+        d.addCallback(lambda res: meow(res, 1))
         # Write something short enough for a LIT file.
         d.addCallback(lambda ign: self._check_file(u"short", "test"))
 
+        d.addCallback(lambda res: meow(res, 2))
         # Write to the same file again with different data.
         d.addCallback(lambda ign: self._check_file(u"short", "different"))
 
+        d.addCallback(lambda res: meow(res, 3))
         # Test that temporary files are not uploaded.
         d.addCallback(lambda ign: self._check_file(u"tempfile", "test", temporary=True))
 
+        d.addCallback(lambda res: meow(res, 4))
         # Test creation of a subdirectory.
         d.addCallback(lambda ign: self._check_mkdir(u"directory"))
 
+        d.addCallback(lambda res: meow(res, 5))
         # Write something longer, and also try to test a Unicode name if the fs can represent it.
         name_u = self.unicode_or_fallback(u"l\u00F8ng", u"long")
         d.addCallback(lambda ign: self._check_file(name_u, "test"*100))
 
+        d.addCallback(lambda res: meow(res, 6))
         # TODO: test that causes an upload failure.
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
 
