@@ -56,7 +56,7 @@ class IntroducerClient(service.MultiService, Referenceable):
         service.MultiService.__init__(self)
 
         self._tub = Tub()
-        self.plugins = plugins
+        self._plugins = plugins
         for name, handler in plugins.items():
             self._tub.addConnectionHintHandler(name, handler)
         self._tub.setServiceParent(self)
@@ -149,7 +149,7 @@ class IntroducerClient(service.MultiService, Referenceable):
                         level=log.WEIRD)
                 continue
             self._deliver_announcements(server_params['key_s'],
-                                        server_params['ann'], self.plugins)
+                                        server_params['ann'], self._plugins)
 
     def _save_announcements(self):
         announcements = []
@@ -398,7 +398,7 @@ class IntroducerClient(service.MultiService, Referenceable):
         self._save_announcements()
         # note: we never forget an index, but we might update its value
 
-        self._deliver_announcements(key_s, ann, self.plugins)
+        self._deliver_announcements(key_s, ann, self._plugins)
 
     def _deliver_announcements(self, key_s, ann, plugins):
         service_name = str(ann["service-name"])

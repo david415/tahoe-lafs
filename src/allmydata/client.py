@@ -3,6 +3,7 @@ from allmydata import node
 from base64 import urlsafe_b64encode
 
 from zope.interface import implements
+from twisted.plugin import getPlugins
 from twisted.internet import reactor, defer
 from twisted.application import service
 from twisted.application.internet import TimerService
@@ -10,6 +11,7 @@ from twisted.python.filepath import FilePath
 from pycryptopp.publickey import rsa
 
 from foolscap.api import eventually
+from foolscap.ipb import IConnectionHintHandler
 
 import allmydata
 from allmydata.storage.server import StorageServer
@@ -96,24 +98,30 @@ class Terminator(service.Service):
             c.stop()
         return service.Service.stopService(self)
 
+def create_plugin_lookup():
+    """returns a lookup dict for transport plugins
+    name -> plugin
+    """
+    ret = {}
+    for plugin in getPlugins(IConnectionHintHandler):
+        ret[plugin.name] = plugin
+    return ret
+
 def load_plugins(transport_dict):
     """
-    load_plugins( transport_dict ) -> plugins_dict
+    load_plugins( transport_dict ) -> plugins dict
     transform a transport specification dict into.
-    plugins_dict of type plugin_name -> plugin_handler
+    plugins dict of type:
+    connection hint name -> plugin
     """
+    plugin_lookup = create_plugin_lookup()
     plugins = {}
-    def getattr_qualified(obj, name):
-        for attr in name.split("."):
-            obj = getattr(obj, attr)
-        return obj
-    for name in transport_dict.keys():
-        handler_dict = transport_dict[name]
-        handler_module, handler_name = handler_dict['handler'].split(':')
+    for connection_hint_type in transport_dict.keys():
+        handler_dict = transport_dict[connection_hint_type]
+        handler_name = handler_dict['handler']
         del handler_dict['handler']
-        handler_func = getattr_qualified(handler_module, handler_name)
-        handler = handler_func(**handler_dict)
-        plugins[name] = handler
+        handler = plugin_lookup[handler_name]
+        plugins[connection_hint_type] = handler
     return plugins
 
 class Client(node.Node, pollmixin.PollMixin):
@@ -235,7 +243,7 @@ class Client(node.Node, pollmixin.PollMixin):
                                         'global' : {
                                             'connection_types' : {
                                                 'tcp' : {
-                                                    'handler': 'foolscap.connection_plugins:DefaultTCP'
+                                                    'handler': 'TCP'
                                                 }
                                             }
                                         }
