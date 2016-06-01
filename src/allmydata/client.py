@@ -102,22 +102,18 @@ def load_plugins(transport_dict):
     transform a transport specification dict into.
     plugins_dict of type plugin_name -> plugin_handler
     """
-    print "load_plugins"
     plugins = {}
     def getattr_qualified(obj, name):
         for attr in name.split("."):
             obj = getattr(obj, attr)
         return obj
     for name in transport_dict.keys():
-        print "name %s" % name
         handler_dict = transport_dict[name]
         handler_module, handler_name = handler_dict['handler'].split(':')
         del handler_dict['handler']
         handler_func = getattr_qualified(handler_module, handler_name)
-        print "handler_func %r" % handler_func
         handler = handler_func(**handler_dict)
         plugins[name] = handler
-    print "plugin keys %s" % plugins.keys()
     return plugins
 
 class Client(node.Node, pollmixin.PollMixin):
@@ -248,7 +244,11 @@ class Client(node.Node, pollmixin.PollMixin):
             connections_filepath.setContent(yaml.safe_dump(self.connections_config))
 
         # global scoped foolscap transport plugins
+        # XXX almost not needed; self.tub is used less and less.
+        # the introducer client and storage client now use
+        # their own tubs.
         plugins = load_plugins(self.connections_config['global']['connection_types'])
+        self.global_plugins = plugins
         self.tub.removeAllConnectionHintHandlers()
         for name, handler in plugins.items():
             self.tub.addConnectionHintHandler(name, handler)
@@ -257,8 +257,8 @@ class Client(node.Node, pollmixin.PollMixin):
         self.old_introducer_config_compatiblity()
         introducers = self.connections_config['introducers']
         for nickname in introducers:
-            if introducers[nickname].has_key('transport_plugins'):
-                plugins = load_plugins(introducers[nickname]['transport_plugins'])
+            if introducers[nickname].has_key('connection_types'):
+                plugins = load_plugins(introducers[nickname]['connection_types'])
             introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", nickname))
             self.introducer_furls.append(introducers[nickname]['furl'])
             ic = IntroducerClient(introducers[nickname]['furl'],
@@ -456,8 +456,14 @@ class Client(node.Node, pollmixin.PollMixin):
 
         # utilize the loaded static server specifications
         servers = self.connections_config['servers']
-        for server_key in servers.keys():
-            eventually(self.storage_broker.got_static_announcement, server_key, servers[server_id]['announcement'])
+        for server_id in servers.keys():
+            # XXX
+            if 'connection_types' in self.connections_config['servers'][server_id]:
+                plugins = self.connections_config['servers'][server_id]['connection_types']
+            else:
+                plugins = self.global_plugins
+            ann = servers[server_id]['announcement']
+            eventually(self.storage_broker.got_static_announcement, server_id, ann, plugins)
 
         for ic in self.introducer_clients:
             sb.use_introducer(ic)
