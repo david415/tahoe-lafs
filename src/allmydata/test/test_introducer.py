@@ -11,6 +11,7 @@ from twisted.python.filepath import FilePath
 from foolscap.api import Tub, Referenceable, fireEventually, flushEventualQueue
 from twisted.application import service
 from allmydata.interfaces import InsufficientVersionError
+from allmydata.client import load_plugins
 from allmydata.introducer.client import IntroducerClient, \
      WrapV2ClientInV1Interface
 from allmydata.introducer.server import IntroducerService, FurlFileConflictError
@@ -24,6 +25,15 @@ from allmydata.web import introweb
 from allmydata.client import Client as TahoeClient
 from allmydata.util import pollmixin, keyutil, idlib, fileutil, iputil
 import allmydata.test.common_util as testutil
+
+def get_default_plugins():
+    plugins_dict = {
+        'tcp' : {
+            'handler': 'TCP'
+        }
+    }
+    return load_plugins(plugins_dict)
+
 
 class LoggingMultiService(service.MultiService):
     def log(self, msg, **kw):
@@ -91,9 +101,10 @@ class ServiceMixin:
 class Introducer(ServiceMixin, unittest.TestCase, pollmixin.PollMixin):
 
     def test_create(self):
+        plugins = get_default_plugins()
         ic = IntroducerClient("introducer.furl", u"my_nickname",
                               "my_version", "oldest_version", {}, fakeseq,
-                              FilePath(self.mktemp()))
+                              FilePath(self.mktemp()), plugins)
         self.failUnless(isinstance(ic, IntroducerClient))
 
     def test_listen(self):
@@ -123,9 +134,10 @@ class Introducer(ServiceMixin, unittest.TestCase, pollmixin.PollMixin):
         # test replacement case where tubid equals a keyid (one should
         # not replace the other)
         i = IntroducerService()
+        plugins = get_default_plugins()
         ic = IntroducerClient("introducer.furl", u"my_nickname",
                               "my_version", "oldest_version", {}, fakeseq,
-                              FilePath(self.mktemp()))
+                              FilePath(self.mktemp()), plugins)
         sk_s, vk_s = keyutil.make_keypair()
         sk, _ignored = keyutil.parse_privkey(sk_s)
         keyid = keyutil.remove_prefix(vk_s, "pub-v0-")
@@ -172,9 +184,10 @@ def make_ann_t(ic, furl, privkey, seqnum):
 
 class Client(unittest.TestCase):
     def test_duplicate_receive_v1(self):
+        plugins = get_default_plugins()
         ic = IntroducerClient("introducer.furl", u"my_nickname",
                               "my_version", "oldest_version", {}, fakeseq,
-                              FilePath(self.mktemp()))
+                              FilePath(self.mktemp()), plugins)
         announcements = []
         ic.subscribe_to("storage",
                         lambda key_s,ann: announcements.append(ann))
@@ -221,14 +234,15 @@ class Client(unittest.TestCase):
         return d
 
     def test_duplicate_receive_v2(self):
+        plugins = get_default_plugins()
         ic1 = IntroducerClient("introducer.furl", u"my_nickname",
                                "ver23", "oldest_version", {}, fakeseq,
-                               FilePath(self.mktemp()))
+                               FilePath(self.mktemp()), plugins)
         # we use a second client just to create a different-looking
         # announcement
         ic2 = IntroducerClient("introducer.furl", u"my_nickname",
                                "ver24","oldest_version",{}, fakeseq,
-                               FilePath(self.mktemp()))
+                               FilePath(self.mktemp()), plugins)
         announcements = []
         def _received(key_s, ann):
             announcements.append( (key_s, ann) )
@@ -329,9 +343,10 @@ class Client(unittest.TestCase):
     def test_id_collision(self):
         # test replacement case where tubid equals a keyid (one should
         # not replace the other)
+        plugins = get_default_plugins()
         ic = IntroducerClient("introducer.furl", u"my_nickname",
                               "my_version", "oldest_version", {}, fakeseq,
-                              FilePath(self.mktemp()))
+                              FilePath(self.mktemp()), plugins)
         announcements = []
         ic.subscribe_to("storage",
                         lambda key_s,ann: announcements.append(ann))
@@ -367,9 +382,10 @@ class Client(unittest.TestCase):
 class Server(unittest.TestCase):
     def test_duplicate(self):
         i = IntroducerService()
+        plugins = get_default_plugins()
         ic1 = IntroducerClient("introducer.furl", u"my_nickname",
                                "ver23", "oldest_version", {}, realseq,
-                               FilePath(self.mktemp()))
+                               FilePath(self.mktemp()), plugins)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnp"
 
         privkey_s, _ = keyutil.make_keypair()
@@ -470,9 +486,10 @@ class Queue(SystemTestMixin, unittest.TestCase):
         ifurl = self.central_tub.registerReference(introducer, furlFile=iff)
         tub2 = Tub()
         tub2.setServiceParent(self.parent)
+        plugins = get_default_plugins()
         c = IntroducerClient(ifurl,
                              u"nickname", "version", "oldest", {}, fakeseq,
-                             FilePath(self.mktemp()))
+                             FilePath(self.mktemp()), plugins)
         c._tub = tub2
         furl1 = "pb://onug64tu@127.0.0.1:123/short" # base32("short")
         sk_s, vk_s = keyutil.make_keypair()
@@ -553,6 +570,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
             tub.setLocation("localhost:%d" % portnum)
 
             log.msg("creating client %d: %s" % (i, tub.getShortTubID()))
+            plugins = get_default_plugins()
             if i == 0:
                 c = old.IntroducerClient_v1(tub, self.introducer_furl,
                                             NICKNAME % str(i),
@@ -562,7 +580,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                                      NICKNAME % str(i),
                                      "version", "oldest",
                                      {"component": "component-v1"}, fakeseq,
-                                     FilePath(self.mktemp()))
+                                     FilePath(self.mktemp()), plugins)
             c._tub = tub
             received_announcements[c] = {}
             def got(key_s_or_tubid, ann, announcements, i):
@@ -881,9 +899,10 @@ class ClientInfo(unittest.TestCase):
         introducer = IntroducerService()
         tub = introducer_furl = None
         app_versions = {"whizzy": "fizzy"}
+        plugins = get_default_plugins()
         client_v2 = IntroducerClient(introducer_furl, NICKNAME % u"v2",
                                      "my_version", "oldest", app_versions,
-                                     fakeseq, FilePath(self.mktemp()))
+                                     fakeseq, FilePath(self.mktemp()), plugins)
         #furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
         #ann_s = make_ann_t(client_v2, furl1, None, 10)
         #introducer.remote_publish_v2(ann_s, Referenceable())
@@ -943,9 +962,10 @@ class Announcements(unittest.TestCase):
         introducer = IntroducerService()
         tub = introducer_furl = None
         app_versions = {"whizzy": "fizzy"}
+        plugins = get_default_plugins()
         client_v2 = IntroducerClient(introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions,
-                                     fakeseq, FilePath(self.mktemp()))
+                                     fakeseq, FilePath(self.mktemp()), plugins)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
         tubid = "62ubehyunnyhzs7r6vdonnm2hpi52w6y"
         ann_s0 = make_ann_t(client_v2, furl1, None, 10)
@@ -965,9 +985,10 @@ class Announcements(unittest.TestCase):
         introducer = IntroducerService()
         tub = introducer_furl = None
         app_versions = {"whizzy": "fizzy"}
+        plugins = get_default_plugins()
         client_v2 = IntroducerClient(introducer_furl, u"nick-v2",
                                      "my_version", "oldest", app_versions,
-                                     fakeseq, FilePath(self.mktemp()))
+                                     fakeseq, FilePath(self.mktemp()), plugins)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:0/swissnum"
         sk_s, vk_s = keyutil.make_keypair()
         sk, _ignored = keyutil.parse_privkey(sk_s)
@@ -1080,10 +1101,11 @@ class Announcements(unittest.TestCase):
                              set([a["ann"]["anonymous-storage-FURL"]
                                   for a in announcements]))
 
+        plugins = get_default_plugins()
         # test loading
         ic2 = IntroducerClient("introducer.furl", u"my_nickname",
                                "my_version", "oldest_version", {}, fakeseq,
-                               ic._cache_filepath)
+                               ic._cache_filepath, plugins)
         announcements = {}
         def got(key_s, ann):
             announcements[key_s] = ann
@@ -1180,10 +1202,10 @@ class NonV1Server(SystemTestMixin, unittest.TestCase):
         i = TooNewServer()
         i.setServiceParent(self.parent)
         self.introducer_furl = self.central_tub.registerReference(i)
-
+        plugins = get_default_plugins()
         c = IntroducerClient(self.introducer_furl,
                              u"nickname-client", "version", "oldest", {},
-                             fakeseq, FilePath(self.mktemp()))
+                             fakeseq, FilePath(self.mktemp()), plugins)
         c._tub.setOption("expose-remote-exception-types", False)
         c._tub.setServiceParent(self.parent)
         portnum = iputil.allocate_tcp_port()
