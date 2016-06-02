@@ -190,7 +190,7 @@ class Client(unittest.TestCase):
                               FilePath(self.mktemp()), plugins)
         announcements = []
         ic.subscribe_to("storage",
-                        lambda key_s,ann: announcements.append(ann))
+                        lambda key_s,ann,*args, **kwargs: announcements.append(ann))
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnpigj2ja2qr2srq4ikjwnl7xfgbra"
         ann1 = (furl1, "storage", "RIStorage", "nick1", "ver23", "ver0")
         ann1b = (furl1, "storage", "RIStorage", "nick1", "ver24", "ver0")
@@ -244,7 +244,7 @@ class Client(unittest.TestCase):
                                "ver24","oldest_version",{}, fakeseq,
                                FilePath(self.mktemp()), plugins)
         announcements = []
-        def _received(key_s, ann):
+        def _received(key_s, ann, *args, **kwargs):
             announcements.append( (key_s, ann) )
         ic1.subscribe_to("storage", _received)
         furl1 = "pb://62ubehyunnyhzs7r6vdonnm2hpi52w6y@127.0.0.1:36106/gydnp"
@@ -349,7 +349,7 @@ class Client(unittest.TestCase):
                               FilePath(self.mktemp()), plugins)
         announcements = []
         ic.subscribe_to("storage",
-                        lambda key_s,ann: announcements.append(ann))
+                        lambda key_s,ann, *args, **kwargs: announcements.append(ann))
         sk_s, vk_s = keyutil.make_keypair()
         sk, _ignored = keyutil.parse_privkey(sk_s)
         keyid = keyutil.remove_prefix(vk_s, "pub-v0-")
@@ -583,7 +583,7 @@ class SystemTest(SystemTestMixin, unittest.TestCase):
                                      FilePath(self.mktemp()), plugins)
             c._tub = tub
             received_announcements[c] = {}
-            def got(key_s_or_tubid, ann, announcements, i):
+            def got(key_s_or_tubid, ann, announcements):
                 if i == 0:
                     index = get_tubid_string_from_ann(ann)
                 else:
@@ -1107,7 +1107,7 @@ class Announcements(unittest.TestCase):
                                "my_version", "oldest_version", {}, fakeseq,
                                ic._cache_filepath, plugins)
         announcements = {}
-        def got(key_s, ann):
+        def got(key_s, ann, *args, **kwargs):
             announcements[key_s] = ann
         ic2.subscribe_to("storage", got)
         ic2._load_announcements() # normally happens when connection fails

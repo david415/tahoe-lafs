@@ -237,7 +237,6 @@ class Client(node.Node, pollmixin.PollMixin):
             with connections_filepath.open() as f:
                 self.connections_config = yaml.safe_load(f)
         except EnvironmentError:
-            exists = False
             self.connections_config = { 'servers' : {},
                                         'introducers' : {},
                                         'global' : {
@@ -467,7 +466,7 @@ class Client(node.Node, pollmixin.PollMixin):
         for server_id in servers.keys():
             # XXX
             if 'connection_types' in self.connections_config['servers'][server_id]:
-                plugins = self.connections_config['servers'][server_id]['connection_types']
+                plugins = self.load_plugins(self.connections_config['servers'][server_id]['connection_types'])
             else:
                 plugins = self.global_plugins
             ann = servers[server_id]['announcement']
