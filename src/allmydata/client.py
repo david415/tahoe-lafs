@@ -1,4 +1,4 @@
-import os, stat, time, weakref
+import os, stat, time, weakref, yaml
 from allmydata import node
 from base64 import urlsafe_b64encode
 
@@ -526,31 +526,42 @@ class Client(node.Node, pollmixin.PollMixin):
                                  sftp_portstr, pubkey_file, privkey_file)
             s.setServiceParent(self)
 
+    def load_magic_folder_config_from_yaml():
+        magicfolders_filepath = FilePath(os.path.join(self.basedir, "private", "magicfolders.yaml"))
+        if magicfolders_filepath.exists():
+            exists = True
+            with magicfolders_filepath.open() as f:
+                magicfolders = yaml.load(f)
+                f.close()
+        else:
+            magicfolders = {}
+        return magicfolders
+
     def init_magic_folder(self):
-        #print "init_magic_folder"
         if self.get_config("drop_upload", "enabled", False, boolean=True):
-            raise OldConfigOptionError("The [drop_upload] section must be renamed to [magic_folder].\n"
+            raise OldConfigOptionError("The [drop_upload] section has been deprecated.\n"
                                        "See docs/frontends/magic-folder.rst for more information.")
 
-        if self.get_config("magic_folder", "enabled", False, boolean=True):
-            #print "magic folder enabled"
-            upload_dircap = self.get_private_config("magic_folder_dircap")
-            collective_dircap = self.get_private_config("collective_dircap")
+        magicfolders = self.load_magic_folder_config_from_yaml()
 
-            local_dir_config = self.get_config("magic_folder", "local.directory").decode("utf-8")
+        for nickname in magicfolders.keys():
+            upload_dircap = magicfolders[nickname]["upload_dircap"]
+            collective_dircap = magicfolders[nickname]["collective_dircap"]
+            local_dir_config = magicfolders[nickname]["local_directory"]
             local_dir = abspath_expanduser_unicode(local_dir_config, base=self.basedir)
-
-            dbfile = os.path.join(self.basedir, "private", "magicfolderdb.sqlite")
+            dbfile = os.path.join(self.basedir, "private", "%s_magicfolderdb.sqlite" % nickname)
             dbfile = abspath_expanduser_unicode(dbfile)
+            umask = magicfolders[nickname]["download_umask"]
 
             from allmydata.frontends import magic_folder
-            umask = self.get_config("magic_folder", "download.umask", 0077)
+
             s = magic_folder.MagicFolder(self, upload_dircap, collective_dircap, local_dir, dbfile, umask)
-            self._magic_folder = s
+            self._magic_folders[nickname] = s
             s.setServiceParent(self)
             s.startService()
 
             # start processing the upload queue when we've connected to enough servers
+            # XXX correct?
             self.connected_enough_d.addCallback(lambda ign: s.ready())
 
     def _check_exit_trigger(self, exit_trigger_file):
