@@ -79,6 +79,7 @@ install_requires = [
     # * pyOpenSSL >= 0.14 is needed in order to avoid
     #   <https://tahoe-lafs.org/trac/tahoe-lafs/ticket/2474>.
     "pyOpenSSL >= 0.14",
+    "PyYAML >= 3.11",
 ]
 
 # Includes some indirect dependencies, but does not include allmydata.
