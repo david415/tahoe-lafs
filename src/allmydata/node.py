@@ -14,6 +14,21 @@ from allmydata.util.fileutil import abspath_expanduser_unicode
 from allmydata.util.encodingutil import get_filesystem_encoding, quote_output
 from allmydata.util import configutil
 
+def _import_tor():
+    # this exists to be overridden by unit tests
+    try:
+        from foolscap.connections import tor
+        return tor
+    except ImportError: # pragma: no cover
+        return None
+
+def _import_i2p():
+    try:
+        from foolscap.connections import i2p
+        return i2p
+    except ImportError: # pragma: no cover
+        return None
+
 # Add our application versions to the data that Foolscap's LogPublisher
 # reports.
 for thing, things_version in get_package_versions().iteritems():
@@ -61,6 +76,9 @@ class UnescapedHashError(Exception):
         return ("The configuration entry %s contained an unescaped '#' character."
                 % quote_output("[%s]%s = %s" % self.args))
 
+class PrivacyError(Exception):
+    """reveal-IP-address = false, but the node is configured in such a way
+    that the IP address could be revealed"""
 
 class Node(service.MultiService):
     # this implements common functionality of both Client nodes and Introducer
@@ -84,6 +102,7 @@ class Node(service.MultiService):
         assert type(self.nickname) is unicode
 
         self.init_tempdir()
+        self.check_privacy()
         self.init_connections()
         self.set_tub_options()
         self.create_main_tub()
@@ -166,18 +185,21 @@ class Node(service.MultiService):
             twlog.msg(e)
             raise e
 
+    def check_privacy(self):
+        self._reveal_ip = self.get_config("node", "reveal-IP-address", True,
+                                          boolean=True)
+
     def _make_tcp_handler(self):
         # this is always available
         from foolscap.connections.tcp import default
         return default()
 
     def _make_tor_handler(self):
-        enabled = self.get_config("tor", "enable", True, boolean=True)
+        enabled = self.get_config("tor", "enabled", True, boolean=True)
         if not enabled:
             return None
-        try:
-            from foolscap.connections import tor
-        except ImportError:
+        tor = _import_tor()
+        if not tor:
             return None
 
         if self.get_config("tor", "launch", False, boolean=True):
@@ -198,12 +220,11 @@ class Node(service.MultiService):
         return tor.default_socks()
 
     def _make_i2p_handler(self):
-        enabled = self.get_config("i2p", "enable", True, boolean=True)
+        enabled = self.get_config("i2p", "enabled", True, boolean=True)
         if not enabled:
             return None
-        try:
-            from foolscap.connections import i2p
-        except ImportError:
+        i2p = _import_i2p()
+        if not i2p:
             return None
 
         samport = self.get_config("i2p", "sam.port", None)
@@ -245,7 +266,16 @@ class Node(service.MultiService):
             raise ValueError("'tahoe.cfg [connections] tcp='"
                              " uses unknown handler type '%s'"
                              % tcp_handler_name)
+        if not handlers[tcp_handler_name]:
+            raise ValueError("'tahoe.cfg [connections] tcp=' uses "
+                             "unavailable/unimportable handler type '%s'. "
+                             "Please pip install tahoe-lafs[%s] to fix."
+                             % (tcp_handler_name, tcp_handler_name))
         self._default_connection_handlers["tcp"] = tcp_handler_name
+
+        if not self._reveal_ip:
+            if self._default_connection_handlers["tcp"] == "tcp":
+                raise PrivacyError("tcp = tcp, must be set to 'tor'")
 
     def set_tub_options(self):
         self.tub_options = {
@@ -286,8 +316,11 @@ class Node(service.MultiService):
 
     def get_tub_port(self):
         # return a descriptor string
-        cfg_tubport = self.get_config("node", "tub.port", "")
-        if cfg_tubport:
+        MISSING = object()
+        cfg_tubport = self.get_config("node", "tub.port", MISSING)
+        if cfg_tubport is not MISSING:
+            if cfg_tubport.strip() == "":
+                return None # don't listen at all
             return self._convert_tub_port(cfg_tubport)
         # For 'tub.port', tahoe.cfg overrides the individual file on disk. So
         # only read self._portnumfile if tahoe.cfg doesn't provide a value.
@@ -304,6 +337,8 @@ class Node(service.MultiService):
         # addresses. Don't probe for local addresses unless necessary.
         split_location = location.split(",")
         if "AUTO" in split_location:
+            if not self._reveal_ip:
+                raise PrivacyError("tub.location uses AUTO")
             local_addresses = iputil.get_local_addresses_sync()
             # tubport must be like "tcp:12345" or "tcp:12345:morestuff"
             local_portnum = int(tubport.split(":")[1])
@@ -313,6 +348,10 @@ class Node(service.MultiService):
                 new_locations.extend(["tcp:%s:%d" % (ip, local_portnum)
                                       for ip in local_addresses])
             else:
+                if not self._reveal_ip:
+                    hint_type = loc.split(":")[0]
+                    if hint_type == "tcp":
+                        raise PrivacyError("tub.location includes tcp: hint")
                 new_locations.append(loc)
         return ",".join(new_locations)
 
@@ -324,15 +363,19 @@ class Node(service.MultiService):
         self.write_config("my_nodeid", b32encode(self.nodeid).lower() + "\n")
         self.short_nodeid = b32encode(self.nodeid).lower()[:8] # ready for printing
         tubport = self.get_tub_port()
-        if tubport in ("0", "tcp:0"):
-            raise ValueError("tub.port cannot be 0: you must choose")
-        self.tub.listenOn(tubport)
+        if tubport:
+            if tubport in ("0", "tcp:0"):
+                raise ValueError("tub.port cannot be 0: you must choose")
+            self.tub.listenOn(tubport)
+            location = self.get_tub_location(tubport)
+            self.tub.setLocation(location)
+            self._tub_is_listening = True
+            self.log("Tub location set to %s" % (location,))
+            # the Tub is now ready for tub.registerReference()
+        else:
+            self._tub_is_listening = False
+            self.log("Tub is not listening")
 
-        location = self.get_tub_location(tubport)
-        self.tub.setLocation(location)
-        self.log("Tub location set to %s" % (location,))
-
-        # the Tub is now ready for tub.registerReference()
         self.tub.setServiceParent(self)
 
     def create_control_tub(self):
@@ -456,6 +499,7 @@ class Node(service.MultiService):
 
         service.MultiService.startService(self)
         self.log("%s running" % self.NODETYPE)
+        twlog.msg("%s running" % self.NODETYPE)
 
     def stopService(self):
         self.log("Node.stopService")

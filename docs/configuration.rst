@@ -4,18 +4,18 @@
 Configuring a Tahoe-LAFS node
 =============================
 
-1.  `Node Types`_
-2.  `Overall Node Configuration`_
-3.  `Connection Management`_
-4.  `Client Configuration`_
-5.  `Storage Server Configuration`_
-6.  `Frontend Configuration`_
-7.  `Running A Helper`_
-8.  `Running An Introducer`_
-9.  `Other Files in BASEDIR`_
-10. `Static Server Definitions`_
-11. `Other files`_
-12. `Example`_
+#.  `Node Types`_
+#.  `Overall Node Configuration`_
+#.  `Connection Management`_
+#.  `Client Configuration`_
+#.  `Storage Server Configuration`_
+#.  `Frontend Configuration`_
+#.  `Running A Helper`_
+#.  `Running An Introducer`_
+#.  `Other Files in BASEDIR`_
+#. `Static Server Definitions`_
+#. `Other files`_
+#. `Example`_
 
 A Tahoe-LAFS node is configured by writing to files in its base directory.
 These files are read by the node when it starts, so each time you change
@@ -152,14 +152,21 @@ set the ``tub.location`` option described below.
     willing to ask Twisted to allocate port numbers in this way). To
     automatically allocate a TCP port, leave ``tub.port`` blank.
 
-    If the ``tub.port`` config key is not provided, the node will look in
-    ``BASEDIR/client.port`` (or ``BASEDIR/introducer.port``, for introducers)
-    for the descriptor that was used last time.
+    If the ``tub.port`` key is empty (i.e. ``tub.port =``), the node will not
+    listen at all, and thus cannot accept connections from other nodes. If
+    ``[storage] enabled = true``, or ``[helper] enabled = true``, or the node
+    is an Introducer, then it is an error to have ``tub.port`` be empty.
 
-    If neither is available, the node will ask the kernel for any available
-    port (the moral equivalent of ``tcp:0``). The allocated port number will
-    be written into a descriptor string in ``BASEDIR/client.port`` (or
-    ``introducer.port``), so that subsequent runs will re-use the same port.
+    If the ``tub.port`` config key is not provided (e.g. ``tub.port`` appears
+    nowhere in the ``[node]`` section, or is commented out), the node will
+    look in ``BASEDIR/client.port`` (or ``BASEDIR/introducer.port``, for
+    introducers) for the descriptor that was used last time.
+
+    If neither ``tub.port`` nor the port file is available, the node will ask
+    the kernel to allocate any available port (the moral equivalent of
+    ``tcp:0``). The allocated port number will be written into a descriptor
+    string in ``BASEDIR/client.port`` (or ``introducer.port``), so that
+    subsequent runs will re-use the same port.
 
 ``tub.location = (string, optional)``
 
@@ -317,6 +324,23 @@ set the ``tub.location`` option described below.
     used for files that usually (on a Unix system) go into ``/tmp``. The
     string will be interpreted relative to the node's base directory.
 
+``reveal-IP-address = (boolean, optional, defaults to True)``
+
+    This is a safety flag. If False, any of the following configuration
+    problems will cause ``tahoe start`` to throw a PrivacyError instead of
+    starting the node:
+
+    * ``[node] tub.location`` contains any ``tcp:`` hints
+
+    * ``[node] tub.location`` uses ``AUTO``, or is missing/empty (because
+      that defaults to AUTO)
+
+    * ``[connections] tcp =`` is set to ``tcp`` (or left as the default),
+      rather than being set to ``tor``
+
+    These configuration problems would reveal the node's IP address to
+    servers and external networks.
+
 
 Connection Management
 =====================
@@ -326,6 +350,10 @@ Tahoe node makes outbound connections. Tor and I2P are configured here. This
 also controls when Tor and I2P are used: for all TCP connections (to hide
 your IP address), or only when necessary (just for servers which declare that
 they need Tor, because they use ``.onion`` addresses).
+
+Note that if you want to protect your node's IP address, you should set
+``[node] reveal-IP-address = False``, which will refuse to launch the node if
+any of the other configuration settings might violate this privacy property.
 
 ``[connections]``
 -----------------
@@ -397,7 +425,7 @@ specify it.
 
 ``[tor]``
 
-``enable = (boolean, optional, defaults to True)``
+``enabled = (boolean, optional, defaults to True)``
 
     If False, this will disable the use of Tor entirely. The default of True
     means the node will use Tor, if necessary, and if possible.
@@ -443,7 +471,7 @@ There are 5 valid combinations of these configuration settings:
 * 2: ``launch = true``: launch a new Tor
 * 3: ``socks.port = tcp:HOST:PORT``: use an existing Tor on the given SOCKS port
 * 4: ``control.port = ENDPOINT``: use an existing Tor at the given control port
-* 5: ``enable = false``: no Tor at all
+* 5: ``enabled = false``: no Tor at all
 
 1 is the default, and should work for any Linux host with the system Tor
 package installed. 2 should work on any box with Tor installed into $PATH,
@@ -465,7 +493,7 @@ on port 7656. This is the default SAM port for the ``i2p`` daemon.
 
 ``[i2p]``
 
-``enable = (boolean, optional, defaults to True)``
+``enabled = (boolean, optional, defaults to True)``
 
     If False, this will disable the use of I2P entirely. The default of True
     means the node will use I2P, if necessary, and if possible.
