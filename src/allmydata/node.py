@@ -188,7 +188,7 @@ class Node(service.MultiService):
         socks_endpoint_desc = self.get_config("tor", "socks.port", None)
         if socks_endpoint_desc:
             socks_ep = endpoints.clientFromString(reactor, socks_endpoint_desc)
-            return tor.socks(socks_ep)
+            return tor.socks_endpoint(socks_ep)
 
         controlport = self.get_config("tor", "control.port", None)
         if controlport:
