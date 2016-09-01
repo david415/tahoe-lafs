@@ -141,7 +141,7 @@ class StorageFarmBroker(service.MultiService):
         self._threshold_listeners = remaining
 
     def _got_announcement(self, key_s, ann):
-        precondition(isinstance(key_s, str), key_s)
+        precondition(isinstance(key_s, unicode), key_s)
         precondition(key_s.startswith("v0-"), key_s)
         precondition(ann["service-name"] == "storage", ann["service-name"])
         server_id = key_s
@@ -277,7 +277,7 @@ class NativeStorageServer(service.MultiService):
 
     def __init__(self, server_id, ann, tub_maker, handler_overrides):
         service.MultiService.__init__(self)
-        assert isinstance(server_id, str)
+        assert isinstance(server_id, unicode)
         self._server_id = server_id
         self.announcement = ann
         self._tub_maker = tub_maker
