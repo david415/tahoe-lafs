@@ -544,10 +544,10 @@ class Client(node.Node, pollmixin.PollMixin):
     def get_encoding_parameters(self):
         return self.encoding_params
 
-    # XXX fix me
     def connected_to_introducer(self):
-        if self.introducer_client:
-            return self.introducer_client.connected_to_introducer()
+        for introducer_client in self.introducer_clients:
+            if introducer_client.connected_to_introducer():
+                return True
         return False
 
     def get_renewal_secret(self): # this will go away
