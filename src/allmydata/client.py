@@ -363,39 +363,40 @@ class Client(node.Node, pollmixin.PollMixin):
         self.introducer_clients = []
         fn = os.path.join(self.basedir, "private", "introducers.yaml")
         introducers_filepath = FilePath(fn)
+
         try:
             with introducers_filepath.open() as f:
                 introducers_yaml = yamlutil.safe_load(f)
-            servers = introducers_yaml.get("introducers", {})
-            log.msg("found %d introducers in private/introducers.yaml" %
-                    len(servers))
-
-            introducers = {}
-            # read furls and petnames from introducers.yaml
-            for petname in servers.keys():
-                introducers[petname] = servers[petname]['furl']
-
-            # read furl from tahoe.cfg
-            ifurl = self.get_config("client", "introducer.furl", None)
-            if ifurl and ifurl not in self.introducers.values():
-                introducer_furl_stripped = ifurl.strip()
-                if not ifurl.startswith('#') or introducer_furl_stripped:
-                    introducers['introducer'] = ifurl
-
-            for petname, furl in servers.items():
-                introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", petname + "_introducer_cache.yaml"))
-                ic = IntroducerClient(self.tub, furl,
-                                      self.nickname,
-                                      str(allmydata.__full_version__),
-                                      str(self.OLDEST_SUPPORTED_VERSION),
-                                      self.get_app_versions(), introducer_cache_filepath)
-                self.introducer_clients.append(ic)
-            # init introducer_clients as usual
-            for ic in self.introducer_clients:
-                ic.setServiceParent(self)
-
+                servers = introducers_yaml.get("introducers", {})
+                log.msg("found %d introducers in private/introducers.yaml" %
+                        len(servers))
         except EnvironmentError:
-            pass
+            servers = {}
+
+        introducers = {}
+        # read furls and petnames from introducers.yaml
+        for petname in servers.keys():
+            introducers[petname] = servers[petname]['furl']
+
+        # read furl from tahoe.cfg
+        ifurl = self.get_config("client", "introducer.furl", None)
+        if ifurl and ifurl not in introducers.values():
+            introducer_furl_stripped = ifurl.strip()
+            if not ifurl.startswith('#') or introducer_furl_stripped:
+                introducers['introducer'] = ifurl
+
+        for petname, furl in servers.items():
+            introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", petname + "_introducer_cache.yaml"))
+            ic = IntroducerClient(self.tub, furl,
+                                  self.nickname,
+                                  str(allmydata.__full_version__),
+                                  str(self.OLDEST_SUPPORTED_VERSION),
+                                  self.get_app_versions(), introducer_cache_filepath)
+            self.introducer_clients.append(ic)
+            # init introducer_clients as usual
+        for ic in self.introducer_clients:
+            ic.setServiceParent(self)
+
 
     def load_static_servers(self):
         """
