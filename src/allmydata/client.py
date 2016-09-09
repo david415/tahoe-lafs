@@ -185,7 +185,7 @@ class Client(node.Node, pollmixin.PollMixin):
         self.started_timestamp = time.time()
         self.logSource="Client"
         self.encoding_params = self.DEFAULT_ENCODING_PARAMETERS.copy()
-        self.init_introducer_client()
+        self.init_introducer_clients()
         self.init_stats_provider()
         self.init_secrets()
         self.init_node_key()
@@ -234,17 +234,59 @@ class Client(node.Node, pollmixin.PollMixin):
         nonce = _make_secret().strip()
         return seqnum, nonce
 
-    def init_introducer_client(self):
-        self.introducer_furl = self.get_config("client", "introducer.furl")
-        introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", "introducer_cache.yaml"))
-        ic = IntroducerClient(self.tub, self.introducer_furl,
-                              self.nickname,
-                              str(allmydata.__full_version__),
-                              str(self.OLDEST_SUPPORTED_VERSION),
-                              self.get_app_versions(),
-                              self._sequencer, introducer_cache_filepath)
-        self.introducer_client = ic
-        ic.setServiceParent(self)
+    def init_introducer_clients(self):
+        self.warn_flag = False
+        self.introducer_clients = []
+        self.introducer_furls = []
+
+        introducers_yaml_filename = os.path.join(self.basedir, "private", "introducers.yaml")
+        introducers_yaml_exists = os.path.exists(introducers_yaml_filename)
+        introducers_filepath = FilePath(introducers_yaml_filename)
+
+        try:
+            with introducers_filepath.open() as f:
+                introducers_yaml = yamlutil.safe_load(f)
+                yaml_introducers = introducers_yaml.get("introducers", {})
+                log.msg("found %d introducers in private/introducers.yaml" %
+                        len(yaml_introducers))
+        except EnvironmentError:
+            yaml_introducers = {}
+
+        introducers = {}
+
+        # read furl from tahoe.cfg
+        tahoe_cfg_introducer_furl = self.get_config("client", "introducer.furl", None)
+        found = False
+        count = 0
+        if tahoe_cfg_introducer_furl is not None and introducers_yaml_exists:
+            count += 1
+            for nick in yaml_introducers.keys():
+                if tahoe_cfg_introducer_furl == yaml_introducers[nick]['furl']:
+                    found = True
+                    break
+            if found and count > 0:
+                log.err("Introducer furl %s specified in both tahoe.cfg and introducers.yaml; please fix impossible configuration.")
+                self.warn_flag = True
+
+        if tahoe_cfg_introducer_furl is not None:
+            introducers[u'default'] = tahoe_cfg_introducer_furl
+
+        # read furls and petnames from introducers.yaml
+        for petname in yaml_introducers.keys():
+            introducers[petname] = yaml_introducers[petname]['furl']
+
+        for petname, furl in introducers.items():
+            introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", petname + "_introducer_cache.yaml"))
+            ic = IntroducerClient(self.tub, furl,
+                                  unicode(petname),
+                                  str(allmydata.__full_version__),
+                                  str(self.OLDEST_SUPPORTED_VERSION),
+                                  self.get_app_versions(), self._sequencer, introducer_cache_filepath)
+            self.introducer_clients.append(ic)
+            self.introducer_furls.append(furl)
+            # init introducer_clients as usual
+        for ic in self.introducer_clients:
+            ic.setServiceParent(self)
 
     def init_stats_provider(self):
         gatherer_furl = self.get_config("client", "stats_gatherer.furl", None)
@@ -365,7 +407,8 @@ class Client(node.Node, pollmixin.PollMixin):
         ann = {"anonymous-storage-FURL": furl,
                "permutation-seed-base32": self._init_permutation_seed(ss),
                }
-        self.introducer_client.publish("storage", ann, self._node_key)
+        for introducer_client in self.introducer_clients:
+            introducer_client.publish("storage", ann, self._node_key)
 
     def init_client(self):
         helper_furl = self.get_config("client", "helper.furl", None)
@@ -422,8 +465,8 @@ class Client(node.Node, pollmixin.PollMixin):
                                               )
         self.storage_broker = sb
         sb.setServiceParent(self)
-
-        sb.use_introducer(self.introducer_client)
+        for ic in self.introducer_clients:
+            sb.use_introducer(ic)
 
     def get_storage_broker(self):
         return self.storage_broker
@@ -574,9 +617,18 @@ class Client(node.Node, pollmixin.PollMixin):
     def get_encoding_parameters(self):
         return self.encoding_params
 
+    def introducer_connection_statuses(self):
+        status = []
+        if self.introducer_clients:
+            for ic in self.introducer_clients:
+                s = ic.connected_to_introducer()
+                status.append(s)
+        return status
+
     def connected_to_introducer(self):
-        if self.introducer_client:
-            return self.introducer_client.connected_to_introducer()
+        for introducer_client in self.introducer_clients:
+            if introducer_client.connected_to_introducer():
+                return True
         return False
 
     def get_renewal_secret(self): # this will go away
