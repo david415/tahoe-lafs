@@ -544,6 +544,14 @@ class Client(node.Node, pollmixin.PollMixin):
     def get_encoding_parameters(self):
         return self.encoding_params
 
+    def introducer_connection_statuses(self):
+        status = []
+        if self.introducer_clients:
+            for ic in self.introducer_clients:
+                s = ic.connected_to_introducer()
+                status.append(s)
+        return status
+
     def connected_to_introducer(self):
         for introducer_client in self.introducer_clients:
             if introducer_client.connected_to_introducer():
