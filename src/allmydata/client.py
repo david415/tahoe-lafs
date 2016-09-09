@@ -418,39 +418,55 @@ class Client(node.Node, pollmixin.PollMixin):
         return self.storage_broker
 
     def init_introducer_clients(self):
+        self.warn_flag = False
         self.introducer_clients = []
-        fn = os.path.join(self.basedir, "private", "introducers.yaml")
-        introducers_filepath = FilePath(fn)
+        self.introducer_furls = []
+
+        introducers_yaml_filename = os.path.join(self.basedir, "private", "introducers.yaml")
+        introducers_yaml_exists = os.path.exists(introducers_yaml_filename)
+        introducers_filepath = FilePath(introducers_yaml_filename)
 
         try:
             with introducers_filepath.open() as f:
                 introducers_yaml = yamlutil.safe_load(f)
-                servers = introducers_yaml.get("introducers", {})
+                yaml_introducers = introducers_yaml.get("introducers", {})
                 log.msg("found %d introducers in private/introducers.yaml" %
-                        len(servers))
+                        len(yaml_introducers))
         except EnvironmentError:
-            servers = {}
+            yaml_introducers = {}
 
         introducers = {}
-        # read furls and petnames from introducers.yaml
-        for petname in servers.keys():
-            introducers[petname] = servers[petname]['furl']
 
         # read furl from tahoe.cfg
-        ifurl = self.get_config("client", "introducer.furl", None)
-        if ifurl and ifurl not in introducers.values():
-            introducer_furl_stripped = ifurl.strip()
-            if not ifurl.startswith('#') or introducer_furl_stripped:
-                introducers['introducer'] = ifurl
+        tahoe_cfg_introducer_furl = self.get_config("client", "introducer.furl", None)
+        found = False
+        count = 0
+        if tahoe_cfg_introducer_furl is not None and introducers_yaml_exists:
+            count += 1
+            for nick in yaml_introducers.keys():
+                if tahoe_cfg_introducer_furl == yaml_introducers[nick]['furl']:
+                    found = True
+                    break
+            if found and count > 0:
+                log.err("Introducer furl %s specified in both tahoe.cfg and introducers.yaml; please fix impossible configuration.")
+                self.warn_flag = True
 
-        for petname, furl in servers.items():
+        if tahoe_cfg_introducer_furl is not None:
+            introducers[u'default'] = tahoe_cfg_introducer_furl
+
+        # read furls and petnames from introducers.yaml
+        for petname in yaml_introducers.keys():
+            introducers[petname] = yaml_introducers[petname]['furl']
+
+        for petname, furl in introducers.items():
             introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", petname + "_introducer_cache.yaml"))
             ic = IntroducerClient(self.tub, furl,
-                                  self.nickname,
+                                  unicode(petname),
                                   str(allmydata.__full_version__),
                                   str(self.OLDEST_SUPPORTED_VERSION),
-                                  self.get_app_versions(), introducer_cache_filepath)
+                                  self.get_app_versions(), self._sequencer, introducer_cache_filepath)
             self.introducer_clients.append(ic)
+            self.introducer_furls.append(furl)
             # init introducer_clients as usual
         for ic in self.introducer_clients:
             ic.setServiceParent(self)
