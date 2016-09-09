@@ -5,6 +5,8 @@ from twisted.trial import unittest
 from allmydata.util import configutil
 from allmydata.test.no_network import GridTestMixin
 from .cli.test_cli import CLITestMixin
+from ..scripts import create_node
+from .. import client
 
 
 class ConfigUtilTests(CLITestMixin, GridTestMixin, unittest.TestCase):
@@ -32,3 +34,65 @@ class ConfigUtilTests(CLITestMixin, GridTestMixin, unittest.TestCase):
 
         config = configutil.get_config(tahoe_cfg)
         self.failUnlessEqual(config.get("node", "descriptor"), descriptor)
+
+    def test_config_validation_success(self):
+        d = self.mktemp()
+        os.mkdir(d)
+        fname = os.path.join(d, 'tahoe.cfg')
+
+        with open(fname, 'w') as f:
+            f.write('[node]\nvalid = foo\n')
+
+        config = configutil.get_config(fname)
+        # should succeed, no exceptions
+        configutil.validate_config(fname, config, dict(node=['valid']))
+
+    def test_config_validation_invalid_item(self):
+        d = self.mktemp()
+        os.mkdir(d)
+        fname = os.path.join(d, 'tahoe.cfg')
+
+        with open(fname, 'w') as f:
+            f.write('[node]\nvalid = foo\ninvalid = foo\n')
+
+        config = configutil.get_config(fname)
+        e = self.assertRaises(
+            configutil.UnknownConfigError,
+            configutil.validate_config,
+            fname, config, dict(node=['valid']),
+        )
+        self.assertIn("section [node] contains unknown option 'invalid'", str(e))
+
+    def test_config_validation_invalid_section(self):
+        d = self.mktemp()
+        os.mkdir(d)
+        fname = os.path.join(d, 'tahoe.cfg')
+
+        with open(fname, 'w') as f:
+            f.write('[node]\nvalid = foo\n[invalid]\n')
+
+        config = configutil.get_config(fname)
+        e = self.assertRaises(
+            configutil.UnknownConfigError,
+            configutil.validate_config,
+            fname, config, dict(node=['valid']),
+        )
+        self.assertIn("contains unknown section [invalid]", str(e))
+
+    def test_create_client_config(self):
+        d = self.mktemp()
+        os.mkdir(d)
+        fname = os.path.join(d, 'tahoe.cfg')
+
+        with open(fname, 'w') as f:
+            opts = {"nickname": "nick",
+                    "webport": "tcp:3456",
+                    "hide-ip": False,
+                    }
+            create_node.write_node_config(f, opts)
+            create_node.write_client_config(f, opts)
+
+        config = configutil.get_config(fname)
+        # should succeed, no exceptions
+        configutil.validate_config(fname, config,
+                                   client._valid_config_sections())
