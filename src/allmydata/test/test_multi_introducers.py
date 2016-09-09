@@ -3,11 +3,9 @@ import os
 
 from twisted.python.filepath import FilePath
 from twisted.trial import unittest
-from allmydata.util.fileutil import write, remove
 from allmydata.util import yamlutil
 from allmydata.client import Client
 from allmydata.scripts.create_node import write_node_config
-from allmydata.web.root import Root
 
 INTRODUCERS_CFG_FURLS_COMMENTED="""introducers:
   'intro1': {furl: furl1}
