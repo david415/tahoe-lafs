@@ -235,56 +235,38 @@ class Client(node.Node, pollmixin.PollMixin):
         return seqnum, nonce
 
     def init_introducer_clients(self):
-        self.warn_flag = False
         self.introducer_clients = []
         self.introducer_furls = []
 
         introducers_yaml_filename = os.path.join(self.basedir, "private", "introducers.yaml")
-        introducers_yaml_exists = os.path.exists(introducers_yaml_filename)
         introducers_filepath = FilePath(introducers_yaml_filename)
 
         try:
             with introducers_filepath.open() as f:
                 introducers_yaml = yamlutil.safe_load(f)
-                yaml_introducers = introducers_yaml.get("introducers", {})
+                introducers = introducers_yaml.get("introducers", {})
                 log.msg("found %d introducers in private/introducers.yaml" %
-                        len(yaml_introducers))
+                        len(introducers))
         except EnvironmentError:
-            yaml_introducers = {}
+            introducers = {}
 
-        introducers = {}
+        if "default" in introducers.keys():
+            raise ValueError("'default' introducer furl cannot be specified in introducers.yaml; please fix impossible configuration.")
 
         # read furl from tahoe.cfg
         tahoe_cfg_introducer_furl = self.get_config("client", "introducer.furl", None)
-        found = False
-        count = 0
-        if tahoe_cfg_introducer_furl is not None and introducers_yaml_exists:
-            count += 1
-            for nick in yaml_introducers.keys():
-                if tahoe_cfg_introducer_furl == yaml_introducers[nick]['furl']:
-                    found = True
-                    break
-            if found and count > 0:
-                log.err("Introducer furl %s specified in both tahoe.cfg and introducers.yaml; please fix impossible configuration.")
-                self.warn_flag = True
+        if tahoe_cfg_introducer_furl:
+            introducers[u'default'] = {'furl':tahoe_cfg_introducer_furl}
 
-        if tahoe_cfg_introducer_furl is not None:
-            introducers[u'default'] = tahoe_cfg_introducer_furl
-
-        # read furls and petnames from introducers.yaml
-        for petname in yaml_introducers.keys():
-            introducers[petname] = yaml_introducers[petname]['furl']
-
-        for petname, furl in introducers.items():
-            introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", petname + "_introducer_cache.yaml"))
-            ic = IntroducerClient(self.tub, furl,
-                                  unicode(petname),
+        for petname, introducer in introducers.items():
+            introducer_cache_filepath = FilePath(os.path.join(self.basedir, "private", "introducer_{}_cache.yaml".format(petname)))
+            ic = IntroducerClient(self.tub, introducer['furl'],
+                                  self.nickname,
                                   str(allmydata.__full_version__),
                                   str(self.OLDEST_SUPPORTED_VERSION),
                                   self.get_app_versions(), self._sequencer, introducer_cache_filepath)
             self.introducer_clients.append(ic)
-            self.introducer_furls.append(furl)
-            # init introducer_clients as usual
+            self.introducer_furls.append(introducer['furl'])
         for ic in self.introducer_clients:
             ic.setServiceParent(self)
 
@@ -618,18 +600,10 @@ class Client(node.Node, pollmixin.PollMixin):
         return self.encoding_params
 
     def introducer_connection_statuses(self):
-        status = []
-        if self.introducer_clients:
-            for ic in self.introducer_clients:
-                s = ic.connected_to_introducer()
-                status.append(s)
-        return status
+        return [ic.connected_to_introducer() for ic in self.introducer_clients]
 
     def connected_to_introducer(self):
-        for introducer_client in self.introducer_clients:
-            if introducer_client.connected_to_introducer():
-                return True
-        return False
+        return any([ic.connected_to_introducer() for ic in self.introducer_clients])
 
     def get_renewal_secret(self): # this will go away
         return self._secret_holder.get_renewal_secret()
