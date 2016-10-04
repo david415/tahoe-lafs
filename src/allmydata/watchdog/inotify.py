@@ -134,4 +134,4 @@ class INotify(PollMixin):
 
         if path_u not in self._callbacks.keys():
             self._callbacks[path_u] = callbacks or []
-            self._observer.schedule(INotifyEventHandler(path, mask, self._callbacks[path_u], self._pending_delay), path=path_u, recursive=recursive)
+            self._observer.schedule(INotifyEventHandler(path_u, mask, self._callbacks[path_u], self._pending_delay), path=path_u, recursive=recursive)
