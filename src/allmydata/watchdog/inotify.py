@@ -46,7 +46,7 @@ class INotifyEventHandler(FileSystemEventHandler):
         event_filepath_u = event.src_path.decode(encodingutil.get_filesystem_encoding())
         event_filepath_u = abspath_expanduser_unicode(event_filepath_u, base=self._path)
 
-        if event_filepath_u == unicode_from_filepath(self._path):
+        if event_filepath_u == self._path:
             # ignore events for parent directory
             return
 
