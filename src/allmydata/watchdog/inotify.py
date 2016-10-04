@@ -9,7 +9,6 @@ from allmydata.util.fileutil import abspath_expanduser_unicode
 from allmydata.util.pollmixin import PollMixin
 from allmydata.util.assertutil import _assert, precondition
 from allmydata.util import log, encodingutil
-from allmydata.util.encodingutil import unicode_from_filepath
 from allmydata.util.fake_inotify import humanReadableMask, \
     IN_WATCH_MASK, IN_ACCESS, IN_MODIFY, IN_ATTRIB, IN_CLOSE_NOWRITE, IN_CLOSE_WRITE, \
     IN_OPEN, IN_MOVED_FROM, IN_MOVED_TO, IN_CREATE, IN_DELETE, IN_DELETE_SELF, \
