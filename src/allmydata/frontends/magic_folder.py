@@ -80,10 +80,10 @@ class MagicFolder(service.MultiService):
         upload_dirnode = self._client.create_node_from_uri(upload_dircap)
         collective_dirnode = self._client.create_node_from_uri(collective_dircap)
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dirnode, pending_delay, clock)
+        self.uploader = Uploader(client, local_path_u, db, upload_dirnode, pending_delay, clock, pending_delay)
         self.downloader = Downloader(client, local_path_u, db, collective_dirnode,
                                      upload_dirnode.get_readonly_uri(), clock, self.uploader.is_pending, umask,
-                                     self.set_public_status)
+                                     self.set_public_status, pending_delay)
         self._public_status = (False, ['Magic folder has not yet started'])
 
     def get_public_status(self):
@@ -126,15 +126,17 @@ class MagicFolder(service.MultiService):
 
 
 class QueueMixin(HookMixin):
-    scan_interval = 0
 
-    def __init__(self, client, local_path_u, db, name, clock, delay=0):
+    def __init__(self, client, local_path_u, db, name, clock, delay):
         self._client = client
         self._local_path_u = local_path_u
         self._local_filepath = to_filepath(local_path_u)
         self._db = db
         self._name = name
         self._clock = clock
+        # XXX pass in an initial value for this; it seems like .10 broke this and it's always 0
+        self._turn_delay = delay
+        self._log('delay is %f' % self._turn_delay)
         self._hooks = {
             'processed': None,
             'started': None,
@@ -156,9 +158,6 @@ class QueueMixin(HookMixin):
         # do we also want to bound on "maximum age"?
         self._process_history = deque(maxlen=20)
         self._stopped = False
-        # XXX pass in an initial value for this; it seems like .10 broke this and it's always 0
-        self._turn_delay = delay
-        self._log('delay is %f' % self._turn_delay)
 
         # a Deferred to wait for the _do_processing() loop to exit
         # (gets set to the return from _do_processing() if we get that
@@ -202,19 +201,13 @@ class QueueMixin(HookMixin):
         seconds.
         """
         # we subtract here so there's a scan on the very first iteration
-        last_scan = self._clock.seconds() - self.scan_interval
+        last_scan = self._clock.seconds() - self._turn_delay
         while not self._stopped:
             self._log("doing iteration")
             d = task.deferLater(self._clock, self._turn_delay, lambda: None)
-            # ">=" is important here if scan scan_interval is 0
-            if self._clock.seconds() - last_scan >= self.scan_interval:
-                # XXX can't we unify the "_full_scan" vs what
-                # Downloader does...
-                last_scan = self._clock.seconds()
-                yield self._when_queue_is_empty()  # (this no-op for us, only Downloader uses it...)
-                self._log("did scan; now %d" % last_scan)
-            else:
-                self._log("skipped scan")
+            last_scan = self._clock.seconds()
+            yield self._when_queue_is_empty()  # (this no-op for us, only Downloader uses it...)
+            self._log("did scan; now %d" % last_scan)
 
             # process anything in our queue
             yield self._process_deque()
@@ -334,7 +327,7 @@ class UploadItem(QueuedItem):
 class Uploader(QueueMixin):
 
     def __init__(self, client, local_path_u, db, upload_dirnode, pending_delay, clock):
-        QueueMixin.__init__(self, client, local_path_u, db, 'uploader', clock, delay=pending_delay)
+        QueueMixin.__init__(self, client, local_path_u, db, 'uploader', clock, pending_delay)
 
         self.is_ready = False
 
@@ -741,12 +734,11 @@ class DownloadItem(QueuedItem):
 
 
 class Downloader(QueueMixin, WriteFileMixin):
-    scan_interval = 3
 
     def __init__(self, client, local_path_u, db, collective_dirnode,
                  upload_readonly_dircap, clock, is_upload_pending, umask,
-                 status_reporter):
-        QueueMixin.__init__(self, client, local_path_u, db, 'downloader', clock, delay=self.scan_interval)
+                 status_reporter, delay):
+        QueueMixin.__init__(self, client, local_path_u, db, 'downloader', clock, delay)
 
         if not IDirectoryNode.providedBy(collective_dirnode):
             raise AssertionError("The URI in '%s' does not refer to a directory."
@@ -764,7 +756,6 @@ class Downloader(QueueMixin, WriteFileMixin):
     @defer.inlineCallbacks
     def start_downloading(self):
         self._log("start_downloading")
-        self._turn_delay = self.scan_interval
         files = self._db.get_all_relpaths()
         self._log("all files %s" % files)
 
@@ -782,7 +773,7 @@ class Downloader(QueueMixin, WriteFileMixin):
                     "Last tried at %s" % self.nice_current_time(),
                 )
                 twlog.msg("Magic Folder failed initial scan: %s" % (e,))
-                yield task.deferLater(self._clock, self.scan_interval, lambda: None)
+                yield task.deferLater(self._clock, self._turn_delay, lambda: None)
 
     def nice_current_time(self):
         return format_time(datetime.fromtimestamp(self._clock.seconds()).timetuple())
