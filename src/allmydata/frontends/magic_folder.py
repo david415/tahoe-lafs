@@ -63,7 +63,7 @@ class MagicFolder(service.MultiService):
     name = 'magic-folder'
 
     def __init__(self, client, upload_dircap, collective_dircap, local_path_u, dbfile, umask,
-                 pending_delay=1.0, clock=None):
+                 pending_delay=5, clock=None):
         precondition_abspath(local_path_u)
 
         service.MultiService.__init__(self)
@@ -80,7 +80,7 @@ class MagicFolder(service.MultiService):
         upload_dirnode = self._client.create_node_from_uri(upload_dircap)
         collective_dirnode = self._client.create_node_from_uri(collective_dircap)
 
-        self.uploader = Uploader(client, local_path_u, db, upload_dirnode, pending_delay, clock, pending_delay)
+        self.uploader = Uploader(client, local_path_u, db, upload_dirnode, pending_delay, clock)
         self.downloader = Downloader(client, local_path_u, db, collective_dirnode,
                                      upload_dirnode.get_readonly_uri(), clock, self.uploader.is_pending, umask,
                                      self.set_public_status, pending_delay)

@@ -573,7 +573,7 @@ class Client(node.Node, pollmixin.PollMixin):
             from allmydata.frontends import magic_folder
             umask = self.get_config("magic_folder", "download.umask", 0077)
 
-            polling_interval = float(self.get_config("magic_folder", "polling_interval", 5.0)
+            polling_interval = float(self.get_config("magic_folder", "polling_interval", 5.0))
             s = magic_folder.MagicFolder(self, upload_dircap, collective_dircap, local_dir, dbfile, umask, pending_delay=polling_interval)
             self._magic_folder = s
             s.setServiceParent(self)
