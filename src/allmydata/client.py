@@ -37,6 +37,16 @@ GiB=1024*MiB
 TiB=1024*GiB
 PiB=1024*TiB
 
+def load_magic_folder_config_from_yaml(basedir):
+    magicfolders_filepath = FilePath(os.path.join(basedir, "private", "magicfolders.yaml"))
+    if magicfolders_filepath.exists():
+        with magicfolders_filepath.open() as f:
+            magicfolders = yamlutil.safe_load(f)
+            f.close()
+    else:
+        magicfolders = {}
+    return magicfolders
+
 def _valid_config_sections():
     cfg = _common_config_sections()
     cfg.update({
@@ -553,16 +563,6 @@ class Client(node.Node, pollmixin.PollMixin):
                                  sftp_portstr, pubkey_file, privkey_file)
             s.setServiceParent(self)
 
-    def load_magic_folder_config_from_yaml(self):
-        magicfolders_filepath = FilePath(os.path.join(self.basedir, "private", "magicfolders.yaml"))
-        if magicfolders_filepath.exists():
-            with magicfolders_filepath.open() as f:
-                magicfolders = yamlutil.safe_load(f)
-                f.close()
-        else:
-            magicfolders = {}
-        return magicfolders
-
     def init_magic_folders(self):
         if self.get_config("drop_upload", "enabled", False, boolean=True):
             raise OldConfigOptionError("The [drop_upload] section has been deprecated.\n"
@@ -571,7 +571,7 @@ class Client(node.Node, pollmixin.PollMixin):
             raise OldConfigOptionError("The [magic_folder] section has been deprecated.\n"
                                        "See docs/frontends/magic-folder.rst for more information.")
 
-        magicfolders = self.load_magic_folder_config_from_yaml()
+        magicfolders = load_magic_folder_config_from_yaml(self.basedir)
         for nickname in magicfolders.keys():
             upload_dircap = magicfolders[nickname]["upload_dircap"]
             collective_dircap = magicfolders[nickname]["collective_dircap"]

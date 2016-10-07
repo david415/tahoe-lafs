@@ -11,7 +11,7 @@ import simplejson
 from twisted.python import usage
 
 from allmydata.util.assertutil import precondition
-
+from allmydata.client import load_magic_folder_config_from_yaml
 from .common import BaseOptions, BasedirOptions, get_aliases
 from .cli import MakeDirectoryOptions, LnOptions, CreateAliasOptions
 import tahoe_mv
@@ -64,16 +64,31 @@ def create(options):
     create_alias_options = _delegate_options(options, CreateAliasOptions())
     create_alias_options.alias = options.alias
 
-    rc = tahoe_add_alias.create_alias(create_alias_options)
-    if rc != 0:
-        print >>options.stderr, create_alias_options.stderr.getvalue()
+    magic_folders = load_magic_folder_config_from_yaml(self['basedir'])
+    for magic_folder in magic_folders:
+        if magic_folder['alias'] == options.alias:
+            print >>options.stderr, "magic-folder: failed to create, alias already exists\n"
+            return -1
+    nodeurl = create_alias_options['node-url']
+    if not nodeurl.endswith("/"):
+        nodeurl += "/"
+    url = nodeurl + "uri?t=mkdir"
+    resp = do_http("POST", url)
+    stderr = create_alias_options.stderr
+    rc = check_http_error(resp, stderr)
+    if rc:
+        print >>create_http_options.stderr, create_alias_options.stderr.getvalue()
         return rc
-    print >>options.stdout, create_alias_options.stdout.getvalue()
+    new_uri = resp.read().strip()
+
+    magic_folder = {"alias":options.alias,
+                 "collective_rw_dircap":new_uri}
 
     if options.nickname is not None:
         invite_options = _delegate_options(options, InviteOptions())
         invite_options.alias = options.alias
         invite_options.nickname = options.nickname
+        magic_folder["nickname"] = options.nickname
         rc = invite(invite_options)
         if rc != 0:
             print >>options.stderr, "magic-folder: failed to invite after create\n"
@@ -88,6 +103,7 @@ def create(options):
             print >>options.stderr, "magic-folder: failed to join after create\n"
             print >>options.stderr, join_options.stderr.getvalue()
             return rc
+    magic_folders.append(magic_folder)
     return 0
 
 class InviteOptions(BasedirOptions):
