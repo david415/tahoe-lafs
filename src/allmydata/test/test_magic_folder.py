@@ -1128,7 +1128,7 @@ class SingleMagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, Reall
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.dirs_monitored'), 0))
         return d
 
-    def test_move_tree(self):
+    def test_move_tree_in(self):
         """
         create an empty directory tree and 'mv' it into the magic folder,
         noting the new directory and uploading it.
@@ -1191,6 +1191,66 @@ class SingleMagicFolderTestMixin(MagicFolderCLITestMixin, ShouldFailMixin, Reall
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 2))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
         d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 2))
+
+        return d
+
+    def test_move_tree_out(self):
+        """
+        create an empty directory tree in the magic folder,
+        and move it out of the magic folder to see if we still
+        get filesystem events from that directory.
+        """
+        small_tree_name = self.unicode_or_fallback(u"small_tr\u00EAe", u"empty_tree")
+        small_tree_dir = abspath_expanduser_unicode(small_tree_name, base=self.local_dir)
+        new_small_tree_dir = abspath_expanduser_unicode(small_tree_name, base=self.basedir)
+
+        d = defer.succeed(None)
+        @defer.inlineCallbacks
+        def _create_small_tree(res):
+            self.mkdir_nonascii(small_tree_dir)
+            what_path = abspath_expanduser_unicode(u"what", base=small_tree_dir)
+            fileutil.write(what_path, "say when")
+            yield iterate(self.magicfolder)
+            yield iterate(self.magicfolder)
+            yield iterate(self.magicfolder)
+
+        d.addCallback(_create_small_tree)
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 1))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 2))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 1))
+
+        @defer.inlineCallbacks
+        def _check_move_small_tree(res):
+            os.rename(small_tree_dir, new_small_tree_dir)
+            yield iterate(self.magicfolder)
+            # when we add the dir, we queue a scan of it; so we want
+            # the upload to "go" as well requiring 1 more iteration
+            yield iterate(self.magicfolder)
+
+        d.addCallback(_check_move_small_tree)
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 1))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 2))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 1))
+
+        @defer.inlineCallbacks
+        def _check_moved_tree_is_not_watched(res):
+            another_path = abspath_expanduser_unicode(u"another", base=new_small_tree_dir)
+            with open(another_path, "wb") as f:
+                f.write("another")
+            yield iterate(self.magicfolder)
+            yield iterate(self.magicfolder)
+            yield iterate(self.magicfolder)
+
+        d.addCallback(_check_moved_tree_is_not_watched)
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_failed'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.files_uploaded'), 1))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_succeeded'), 2))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.objects_queued'), 0))
+        d.addCallback(lambda ign: self.failUnlessReallyEqual(self._get_count('uploader.directories_created'), 1))
 
         return d
 
