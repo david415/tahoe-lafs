@@ -367,7 +367,7 @@ class Uploader(QueueMixin):
                     | IN_EXCL_UNLINK
                     )
         self._notifier.watch(self._local_filepath, mask=self.mask, callbacks=[self._notify],
-                             recursive=False)#True)
+                             recursive=True)
 
     def start_monitoring(self):
         self._log("start_monitoring")
@@ -509,9 +509,15 @@ class Uploader(QueueMixin):
                 self._pending.remove(relpath_u)
             except KeyError:
                 self._log("WRONG that %r wasn't in pending" % (relpath_u,))
+
             encoded_path_u = magicpath.path2magic(relpath_u)
 
             if not pathinfo.exists:
+                try:
+                    self._notifier.ignore(fp)
+                except KeyError, e:
+                    pass
+
                 # FIXME merge this with the 'isfile' case.
                 self._log("notified object %s disappeared (this is normal)" % quote_filepath(fp))
                 self._count('objects_disappeared')
