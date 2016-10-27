@@ -92,11 +92,13 @@ class INotify(PollMixin):
 
     def set_pending_delay(self, delay):
         print "set pending delay"
+        assert self._state != STARTED
         self._pending_delay = delay
         self._observer = Observer(timeout=self._pending_delay)
 
     def startReading(self):
         print "START READING BEGIN"
+        assert self._state != STARTED
         try:
             _assert(len(self._callbacks) != 0, "no watch set")
             self._observer.start()
