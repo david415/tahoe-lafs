@@ -1,6 +1,7 @@
 
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+from watchdog.events import FileSystemEventHandler, DirCreatedEvent, FileCreatedEvent, FileModifiedEvent
+
 
 from twisted.internet import reactor
 from twisted.python.filepath import FilePath
@@ -50,21 +51,27 @@ class INotifyEventHandler(FileSystemEventHandler):
             return
 
         def _maybe_notify(path):
-            if path in self._pending:
-                return
-            self._pending.add(path)
-            def _do_callbacks():
-                print "DO CALLBACKS"
-                self._pending.remove(path)
-                event_mask = IN_CHANGED
-                if event.is_directory:
-                    event_mask = event_mask | IN_ISDIR
-                for cb in self._callbacks:
-                    try:
-                        cb(None, FilePath(path), event_mask)
-                    except Exception, e:
-                        log.err(e)
-            _do_callbacks()
+            try:
+                if path in self._pending:
+                    return
+                self._pending.add(path)
+                def _do_callbacks():
+                    print "DO CALLBACKS"
+                    self._pending.remove(path)
+                    event_mask = IN_CHANGED
+                    if isinstance(event, (DirCreatedEvent, FileCreatedEvent)):
+                        event_mask = event_mask | IN_CREATE
+                    if event.is_directory:
+                        event_mask = event_mask | IN_ISDIR
+                    for cb in self._callbacks:
+                        try:
+                            cb(None, FilePath(path), event_mask)
+                        except Exception, e:
+                            print e
+                            log.err(e)
+                _do_callbacks()
+            except Exception as e:
+                print("BAD STUFF", e)
         reactor.callFromThread(_maybe_notify, event_filepath_u)
 
     def on_any_event(self, event):
