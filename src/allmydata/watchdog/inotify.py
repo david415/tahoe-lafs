@@ -127,6 +127,7 @@ class INotify(PollMixin):
         precondition(isinstance(recursive, bool), recursive=recursive)
         assert autoAdd == False
 
+        recursive = False
         self._recursive = TRUE if recursive else FALSE
         path_u = path.path
         if not isinstance(path_u, unicode):
