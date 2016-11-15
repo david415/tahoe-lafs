@@ -16,6 +16,7 @@ from allmydata.interfaces import IFilesystemNode, IFileNode, \
      IImmutableFileNode, IMutableFileNode, IDirectoryNode
 from foolscap.api import flushEventualQueue
 import allmydata.test.common_util as testutil
+from allmydata.test.no_network import GridTestMixin
 
 
 BASECONFIG = ("[client]\n"
@@ -451,6 +452,12 @@ class Run(unittest.TestCase, testutil.StallMixin):
             return c2.disownServiceParent()
         d.addCallback(_restart)
         return d
+
+class TestClientReadiness(GridTestMixin):
+    def test_readiness(self):
+        self.set_up_grid(num_clients=1, num_servers=1)
+        self.g.clients[0].debug_wait_for_client_connections(1)
+        self.failUnless(self.g.clients[0].is_ready())
 
 class NodeMaker(testutil.ReallyEqualMixin, unittest.TestCase):
     def test_maker(self):
