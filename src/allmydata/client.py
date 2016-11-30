@@ -617,6 +617,12 @@ class Client(node.Node, pollmixin.PollMixin):
     def get_cancel_secret(self):
         return self._secret_holder.get_cancel_secret()
 
+    def when_ready(self):
+        print("real client when_ready")
+        threshold = min(self.encoding_params["k"],
+                        self.encoding_params["happy"] + 1)
+        return self.storage_broker.when_connected_enough(threshold)
+
     def is_ready(self):
         threshold = min(self.encoding_params["k"],
                         self.encoding_params["happy"] + 1)

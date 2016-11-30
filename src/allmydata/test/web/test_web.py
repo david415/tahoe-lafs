@@ -224,6 +224,11 @@ class FakeClient(Client):
         # don't upcall to Client.__init__, since we only want to initialize a
         # minimal subset
         service.MultiService.__init__(self)
+        self.encoding_params = {
+            "k": 7,
+            "happy": 9
+        }
+        self.ready_d = defer.Deferred()
         self._magic_folder = None
         self.all_contents = {}
         self.nodeid = "fake_nodeid"
@@ -256,6 +261,11 @@ class FakeClient(Client):
         self.nodemaker.all_contents = self.all_contents
         self.mutable_file_default = SDMF_VERSION
         self.addService(FakeStorageServer(self.nodeid, self.nickname))
+
+    def when_ready(self):
+        print("FakeClient when_ready")
+        self.ready_d.callback(None)
+        return defer.succeed(None)
 
     def get_long_nodeid(self):
         return "v0-nodeid"
@@ -754,6 +764,14 @@ class Web(WebMixin, WebErrorMixin, testutil.StallMixin, testutil.ReallyEqualMixi
             self.failUnlessIn(u'<li>Server Nickname: <span class="nickname mine">fake_nickname \u263A</span></li>', res_u)
         d.addCallback(_check)
         return d
+
+    def test_ready_status(self):
+        print "test ready status"
+        d = self.GET("/ready_status", followRedirect=True)
+        def _check(res):
+            self.failUnlessIn("OK", res)
+        d.addCallback(_check)
+        return self.s.ready_d
 
     def test_status(self):
         h = self.s.get_history()

@@ -950,6 +950,23 @@ class MapupdateStatusPage(rend.Page, RateAndTimeMixin):
         return T.li["Per-Server Response Times: ", l]
 
 
+class ReadyStatus(rend.Page):
+
+    def __init__(self, when_ready):
+        self.when_ready = when_ready
+        print "init when_ready %s" % when_ready
+
+    def renderHTTP(self, ctx):
+        print "render http"
+        d = self.when_ready()
+        req = inevow.IRequest(ctx)
+        def is_ready(ign):
+            req.write("OK")
+            req.finish()
+        d.addCallback(is_ready)
+        d.addCallback(lambda ign: req.deferred)
+        return d
+
 class Status(rend.Page):
     docFactory = getxmlfile("status.xhtml")
     addSlash = True
